@@ -1,0 +1,9 @@
+[workspace]
+
+resolver = "2"
+
+members = [
+    "processor",
+    "test-bin",
+    "test-bin2",
+]

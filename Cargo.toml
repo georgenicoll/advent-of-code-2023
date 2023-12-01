@@ -4,6 +4,7 @@ resolver = "2"
 
 members = [
     "processor",
+    "template",
     "test-bin",
     "test-bin2",
     "day1",

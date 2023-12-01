@@ -2,6 +2,7 @@ use once_cell::sync::Lazy;
 use processor::{ok_identity, process, reverse};
 use regex::Regex;
 
+type AError = anyhow::Error;
 type State = Vec<i64>;
 type FinalState = i64;
 
@@ -37,7 +38,7 @@ fn main() {
     }
 }
 
-fn parse_line_1(mut state: State, line: String) -> Result<State, anyhow::Error> {
+fn parse_line_1(mut state: State, line: String) -> Result<State, AError> {
     let mut first: Option<i64> = None;
     let mut second: Option<i64> = None;
     for c in line.chars() {
@@ -50,7 +51,7 @@ fn parse_line_1(mut state: State, line: String) -> Result<State, anyhow::Error> 
     }
     let (a, b) = first
         .and_then(|a| second.map(|b| (a, b)))
-        .ok_or(anyhow::Error::msg(format!(
+        .ok_or(AError::msg(format!(
             "Didn't get the 2 numbers on line: {}",
             line
         )))?;
@@ -65,7 +66,7 @@ static RE_BACKWARDS: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"([1-9]|eno|owt|eerht|ruof|evif|xis|neves|thgie|enin)").unwrap()
 });
 
-fn parse_line_2(mut state: State, line: String) -> Result<State, anyhow::Error> {
+fn parse_line_2(mut state: State, line: String) -> Result<State, AError> {
     let mut first: Option<i64> = None;
     let mut second: Option<i64> = None;
 
@@ -95,7 +96,7 @@ fn parse_line_2(mut state: State, line: String) -> Result<State, anyhow::Error> 
 
     let (a, b) = first
         .and_then(|a| second.map(|b| (a, b)))
-        .ok_or(anyhow::Error::msg(format!(
+        .ok_or(AError::msg(format!(
             "Didn't get the 2 numbers on line: {}",
             line
         )))?;
@@ -103,7 +104,7 @@ fn parse_line_2(mut state: State, line: String) -> Result<State, anyhow::Error> 
     Ok(state)
 }
 
-fn perform_processing(state: State) -> Result<FinalState, anyhow::Error> {
+fn perform_processing(state: State) -> Result<FinalState, AError> {
     //println!("State: {:?}", state);
     Ok(state.iter().sum())
 }

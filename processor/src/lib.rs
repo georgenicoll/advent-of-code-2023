@@ -25,6 +25,11 @@ pub fn ok_identity<T>(t: T) -> Result<T, anyhow::Error> {
     Ok(t)
 }
 
+pub fn reverse(s: &str) -> String {
+    //assume no graphemes - use unicode_segmentation if this is not the case
+    s.chars().rev().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

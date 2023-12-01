@@ -1,14 +1,13 @@
-use std::collections::VecDeque;
-
-use processor::{ok_identity, process};
-use substring::{self, Substring};
+use once_cell::sync::Lazy;
+use processor::{ok_identity, process, reverse};
+use regex::Regex;
 
 type State = Vec<i64>;
 type FinalState = i64;
 
 fn main() {
-    //let file = "test-input.txt";
-    //let file = "test-input2.txt";
+    //let file = "day1/test-input.txt";
+    //let file = "day1/test-input2.txt";
     let file = "input.txt";
 
     let result1 = process(
@@ -59,89 +58,39 @@ fn parse_line_1(mut state: State, line: String) -> Result<State, anyhow::Error> 
     Ok(state)
 }
 
-fn window_digit(window: &VecDeque<char>) -> Option<i64> {
-    let window_string: String = window.iter().cloned().collect::<String>();
-    let first_try = match window_string.substring(0, 1) {
-        "1" => Some(1),
-        "2" => Some(2),
-        "3" => Some(3),
-        "4" => Some(4),
-        "5" => Some(5),
-        "6" => Some(6),
-        "7" => Some(7),
-        "8" => Some(8),
-        "9" => Some(9),
-        _ => None,
-    };
-    let second_try = first_try.or_else(|| match window_string.substring(0, 3) {
-        "one" => Some(1),
-        "two" => Some(2),
-        "six" => Some(6),
-        _ => None,
-    });
-    let third_try = second_try.or_else(|| match window_string.substring(0, 4) {
-        "four" => Some(4),
-        "five" => Some(5),
-        "nine" => Some(9),
-        _ => None,
-    });
-    third_try.or_else(|| match window_string.substring(0, 5) {
-        "three" => Some(3),
-        "seven" => Some(7),
-        "eight" => Some(8),
-        _ => None,
-    })
-}
+static RE_FORWARDS: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"([1-9]|one|two|three|four|five|six|seven|eight|nine)").unwrap()
+});
+static RE_BACKWARDS: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"([1-9]|eno|owt|eerht|ruof|evif|xis|neves|thgie|enin)").unwrap()
+});
 
 fn parse_line_2(mut state: State, line: String) -> Result<State, anyhow::Error> {
     let mut first: Option<i64> = None;
     let mut second: Option<i64> = None;
 
-    let mut window: VecDeque<char> = VecDeque::new();
-    let max_window_size = 5;
-
-    'outer_forwards: {
-        for char in line.chars() {
-            window.push_back(char);
-            if window.len() > max_window_size {
-                window.pop_front();
-            }
-            let converted = window_digit(&window);
-            if converted.is_some() {
-                first = converted;
-                break 'outer_forwards;
-            }
-        }
-        while !window.is_empty() {
-            window.pop_front();
-            let converted = window_digit(&window);
-            if converted.is_some() {
-                first = converted;
-                break 'outer_forwards;
-            }
+    fn get_num(s: &str) -> Option<i64> {
+        match s {
+            "1" | "one" => Some(1),
+            "2" | "two" => Some(2),
+            "3" | "three" => Some(3),
+            "4" | "four" => Some(4),
+            "5" | "five" => Some(5),
+            "6" | "six" => Some(6),
+            "7" | "seven" => Some(7),
+            "8" | "eight" => Some(8),
+            "9" | "nine" => Some(9),
+            _ => None,
         }
     }
 
-    'outer_backwards: {
-        for char in line.chars().rev() {
-            window.push_front(char);
-            if window.len() > max_window_size {
-                window.pop_back();
-            }
-            let converted = window_digit(&window);
-            if converted.is_some() {
-                second = converted;
-                break 'outer_backwards;
-            }
-        }
-        while !window.is_empty() {
-            window.pop_back();
-            let converted = window_digit(&window);
-            if converted.is_some() {
-                second = converted;
-                break 'outer_backwards;
-            }
-        }
+    if let Some(m) = RE_FORWARDS.find(line.as_str()) {
+        first = get_num(m.as_str())
+    }
+
+    let backwards_line: String = reverse(&line);
+    if let Some(m) = RE_BACKWARDS.find(backwards_line.as_str()) {
+        second = get_num(reverse(m.as_str()).as_str());
     }
 
     let (a, b) = first

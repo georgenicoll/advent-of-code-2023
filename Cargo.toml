@@ -6,4 +6,5 @@ members = [
     "processor",
     "test-bin",
     "test-bin2",
+    "day1",
 ]

@@ -59,12 +59,10 @@ fn parse_line_1(mut state: State, line: String) -> Result<State, AError> {
     Ok(state)
 }
 
-static RE_FORWARDS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"([1-9]|one|two|three|four|five|six|seven|eight|nine)").unwrap()
-});
-static RE_BACKWARDS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"([1-9]|eno|owt|eerht|ruof|evif|xis|neves|thgie|enin)").unwrap()
-});
+static RE_FORWARDS: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"([1-9]|one|two|three|four|five|six|seven|eight|nine)").unwrap());
+static RE_BACKWARDS: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"([1-9]|eno|owt|eerht|ruof|evif|xis|neves|thgie|enin)").unwrap());
 
 fn parse_line_2(mut state: State, line: String) -> Result<State, AError> {
     let mut first: Option<i64> = None;

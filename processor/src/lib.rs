@@ -1,6 +1,8 @@
 use std::{
+    collections::HashSet,
     fs::File,
-    io::{BufRead, BufReader}, str::Chars, collections::HashSet,
+    io::{BufRead, BufReader},
+    str::Chars,
 };
 
 use anyhow::Context;
@@ -37,7 +39,10 @@ pub fn reverse(s: &str) -> String {
 
 // Read a word for the current positions of chars, advancing to the next non-delimiter and reading to the end
 // or the next delimiter
-pub fn read_word(chars: &mut Chars<'_>, delimiters: &HashSet<Delimiter>) -> Option<(String, Option<Delimiter>)> {
+pub fn read_word(
+    chars: &mut Chars<'_>,
+    delimiters: &HashSet<Delimiter>,
+) -> Option<(String, Option<Delimiter>)> {
     let mut consumed: Vec<char> = Vec::new();
     let mut next: Option<char> = Some('/');
     while next.is_some() {
@@ -62,7 +67,10 @@ pub fn read_word(chars: &mut Chars<'_>, delimiters: &HashSet<Delimiter>) -> Opti
     }
 }
 
-pub fn read_int(chars: &mut Chars<'_>, delimiters: &HashSet<Delimiter>) -> Result<(i64, Option<Delimiter>), AError> {
+pub fn read_int(
+    chars: &mut Chars<'_>,
+    delimiters: &HashSet<Delimiter>,
+) -> Result<(i64, Option<Delimiter>), AError> {
     read_word(chars, delimiters)
         .ok_or_else(|| AError::msg("No word found to convert to integer"))
         .and_then(|word_and_delimiter| {

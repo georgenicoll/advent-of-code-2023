@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use once_cell::sync::Lazy;
-use processor::{process, read_word, read_int, ok_identity};
+use processor::{ok_identity, process, read_int, read_word};
 
 type AError = anyhow::Error;
 type InitialState = Vec<Game>;
@@ -23,7 +23,7 @@ fn main() {
         file,
         Vec::new(),
         parse_line,
-        finalise_state,
+        ok_identity,
         perform_processing_1,
         ok_identity,
     );
@@ -36,7 +36,7 @@ fn main() {
         file,
         Vec::new(),
         parse_line,
-        finalise_state,
+        ok_identity,
         perform_processing_2,
         ok_identity,
     );
@@ -46,9 +46,7 @@ fn main() {
     }
 }
 
-static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(||
-    HashSet::from([' ', ':', ',', ';'])
-);
+static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(|| HashSet::from([' ', ':', ',', ';']));
 
 fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AError> {
     let mut chars = line.chars();
@@ -61,8 +59,12 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
         let mut num_cubes_and_delimiter = read_int(&mut chars, &DELIMITERS);
         while num_cubes_and_delimiter.is_ok() {
             let (num_cubes, _) = num_cubes_and_delimiter.as_ref().ok().unwrap();
-            let (colour, delimiter) = read_word(&mut chars, &DELIMITERS)
-                .ok_or_else(|| AError::msg(format!("Expected a colour after {} in '{}'", num_cubes, line)))?;
+            let (colour, delimiter) = read_word(&mut chars, &DELIMITERS).ok_or_else(|| {
+                AError::msg(format!(
+                    "Expected a colour after {} in '{}'",
+                    num_cubes, line
+                ))
+            })?;
             cubes.insert(colour, num_cubes.clone());
             let end_of_pick = delimiter.map(|c| c == ';').unwrap_or(true);
             if end_of_pick {
@@ -77,25 +79,21 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
     Ok(state)
 }
 
-fn finalise_state(state: InitialState) -> Result<LoadedState, AError> {
-    // state.iter().for_each(|game| {
-    //     println!("{:?}", game);
-    // });
-    Ok(state)
-}
-
 fn perform_processing_1(state: LoadedState) -> Result<ProcessedState, AError> {
     let max_cubes: HashMap<String, i64> = HashMap::from([
         ("red".into(), 12.into()),
         ("green".into(), 13.into()),
-        ("blue".into(), 14.into())
+        ("blue".into(), 14.into()),
     ]);
 
-    let possible_games = state.iter()
+    let possible_games = state
+        .iter()
         .filter(|game| {
             game.picks.iter().all(|pick| {
                 max_cubes.iter().all(|(max_colour, max_number)| {
-                    pick.get(max_colour).map(|number| number <= max_number).unwrap_or(true)
+                    pick.get(max_colour)
+                        .map(|number| number <= max_number)
+                        .unwrap_or(true)
                 })
             })
         })
@@ -109,12 +107,13 @@ fn perform_processing_1(state: LoadedState) -> Result<ProcessedState, AError> {
 }
 
 fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
-    let powers = state.iter()
+    let powers = state
+        .iter()
         .map(|game| {
             let mut max_cubes: HashMap<String, i64> = HashMap::from([
                 ("red".into(), 0.into()),
                 ("green".into(), 0.into()),
-                ("blue".into(), 0.into())
+                ("blue".into(), 0.into()),
             ]);
             game.picks.iter().for_each(|pick| {
                 pick.iter().for_each(|(colour, number)| {
@@ -124,9 +123,9 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
                     }
                 })
             });
-            let power = max_cubes.iter().fold(1, |acc, (_colour, number)| {
-                acc * number
-            });
+            let power = max_cubes
+                .iter()
+                .fold(1, |acc, (_colour, number)| acc * number);
             power
         })
         .collect::<Vec<i64>>();

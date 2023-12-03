@@ -1,11 +1,10 @@
 use std::collections::HashSet;
 
-use once_cell::sync::Lazy;
-use processor::process;
+use processor::{adjacent_coords, process, Cells, CellsBuilder};
 
 type AError = anyhow::Error;
-type InitialState = Vec<Vec<Cell>>;
-type LoadedState = Vec<Vec<PartCell>>;
+type InitialState = CellsBuilder<Cell>;
+type LoadedState = Cells<PartCell>;
 type ProcessedState1 = Vec<PartCell>;
 type ProcessedState2 = Vec<(PartCell, PartCell)>;
 type FinalResult = u64;
@@ -31,7 +30,7 @@ fn main() {
 
     let result1 = process(
         file,
-        Vec::new(),
+        CellsBuilder::new(),
         parse_line,
         finalise_state,
         perform_processing_1,
@@ -44,7 +43,7 @@ fn main() {
 
     let result2 = process(
         file,
-        Vec::new(),
+        CellsBuilder::new(),
         parse_line,
         finalise_state,
         perform_processing_2,
@@ -57,7 +56,7 @@ fn main() {
 }
 
 fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AError> {
-    let mut cells = Vec::new();
+    state.new_line();
     for c in line.chars() {
         let cell = c
             .to_digit(10)
@@ -66,9 +65,8 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
                 '.' => Cell::Dot,
                 _ => Cell::Symbol(c),
             });
-        cells.push(cell);
+        state.add_cell(cell)?;
     }
-    state.push(cells);
     Ok(state)
 }
 
@@ -88,77 +86,65 @@ fn calculate_part_cell_number(current_number: &Vec<&u64>, current_id: &mut u32) 
     part_number
 }
 
-fn finalise_state(state: InitialState) -> Result<LoadedState, AError> {
+fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
     let mut current_id: u32 = 0;
+    let cells = state.build_cells(Cell::Dot)?;
 
-    let final_state: LoadedState = state
-        .iter()
-        .map(|cells| {
-            let mut current_number = Vec::new();
-            let mut part_cells: Vec<PartCell> = Vec::with_capacity(cells.len());
+    let mut builder = CellsBuilder::new();
+    for y in 0..cells.side_lengths.1 {
+        builder.new_line();
 
-            fn write_part_numbers(
-                current_number: &mut Vec<&u64>,
-                current_id: &mut u32,
-                index: &usize,
-                part_cells: &mut Vec<PartCell>,
-            ) {
-                let part_cell_number = calculate_part_cell_number(current_number, current_id);
-                for cell_index in (*index - current_number.len())..*index {
-                    part_cells[cell_index] = part_cell_number.clone();
+        let mut current_number = Vec::new();
+
+        fn write_part_numbers(
+            current_number: &mut Vec<&u64>,
+            current_id: &mut u32,
+            builder: &mut CellsBuilder<PartCell>,
+            x: usize,
+            y: usize,
+        ) {
+            let part_cell_number = calculate_part_cell_number(current_number, current_id);
+            for cell_index in (x - current_number.len())..x {
+                let current = builder.get_mut(cell_index, y).unwrap();
+                *current = part_cell_number.clone();
+            }
+            current_number.clear();
+        }
+
+        for x in 0..cells.side_lengths.0 {
+            let cell = cells.get(x, y)?;
+            let write_part_number = match cell {
+                Cell::Number(n) => {
+                    current_number.push(n);
+                    builder.add_cell(PartCell::Dot)?;
+                    false
                 }
-                current_number.clear();
-            }
-
-            for (i, cell) in cells.iter().enumerate() {
-                let write_part_number = match cell {
-                    Cell::Number(n) => {
-                        current_number.push(n);
-                        part_cells.push(PartCell::Dot);
-                        false
-                    }
-                    Cell::Symbol(s) => {
-                        part_cells.push(PartCell::Symbol(*s));
-                        true
-                    }
-                    Cell::Dot => {
-                        part_cells.push(PartCell::Dot);
-                        true
-                    }
-                };
-                if write_part_number && !current_number.is_empty() {
-                    write_part_numbers(&mut current_number, &mut current_id, &i, &mut part_cells)
+                Cell::Symbol(s) => {
+                    builder.add_cell(PartCell::Symbol(*s))?;
+                    true
                 }
+                Cell::Dot => {
+                    builder.add_cell(PartCell::Dot)?;
+                    true
+                }
+            };
+            if write_part_number && !current_number.is_empty() {
+                write_part_numbers(&mut current_number, &mut current_id, &mut builder, x, y)
             }
-            if !current_number.is_empty() {
-                write_part_numbers(
-                    &mut current_number,
-                    &mut current_id,
-                    &cells.len(),
-                    &mut part_cells,
-                )
-            }
-            part_cells
-        })
-        .collect();
-    // for cells in &final_state {
-    //     println!("{:?}", cells);
-    // }
-    Ok(final_state)
+        }
+
+        if !current_number.is_empty() {
+            write_part_numbers(
+                &mut current_number,
+                &mut current_id,
+                &mut builder,
+                cells.side_lengths.0,
+                y,
+            )
+        }
+    }
+    builder.build_cells(PartCell::Dot)
 }
-
-static ADJACENT_DELTAS: Lazy<Vec<(i8, i8)>> = Lazy::new(|| {
-    Vec::from([
-        (-1, -1),
-        (0, -1),
-        (1, -1), //line above
-        (-1, 0),
-        (1, 0), //this line
-        (-1, 1),
-        (0, 1),
-        (1, 1), //line below
-    ])
-});
 
 fn is_symbol_cell(cell: &PartCell) -> bool {
     match cell {
@@ -167,66 +153,27 @@ fn is_symbol_cell(cell: &PartCell) -> bool {
     }
 }
 
-fn is_adjacent_to_symbol_in_line(
-    x: usize,
-    cells: &Vec<PartCell>,
-    ignore_current_pos: bool,
-) -> bool {
-    //before
-    if x > 0 {
-        let part_cell = cells.get(x - 1).unwrap();
-        if is_symbol_cell(part_cell) {
-            return true;
-        };
-    }
-    //this
-    if !ignore_current_pos {
-        let part_cell = cells.get(x).unwrap();
-        if is_symbol_cell(part_cell) {
-            return true;
-        };
-    }
-    //after
-    if x < cells.len() - 1 {
-        let part_cell = cells.get(x + 1).unwrap();
-        if is_symbol_cell(part_cell) {
-            return true;
-        };
-    }
-    false
-}
-
 fn is_adjacent_to_symbol(x: usize, y: usize, state: &LoadedState) -> bool {
-    //line above
-    if y > 0 {
-        let cells = state.get(y - 1).unwrap();
-        if is_adjacent_to_symbol_in_line(x, cells, false) {
-            return true;
-        }
-    }
-    //this line
-    let cells = state.get(y).unwrap();
-    if is_adjacent_to_symbol_in_line(x, cells, true) {
-        return true;
-    }
-    //line below
-    if y < state.len() - 1 {
-        let cells = state.get(y + 1).unwrap();
-        if is_adjacent_to_symbol_in_line(x, cells, false) {
-            return true;
-        }
-    }
-    return false;
+    let centre = (x, y);
+    let adjacent_coords = adjacent_coords(&centre, &state.side_lengths);
+    adjacent_coords.iter().any(|(x, y)| {
+        let cell = state.get(*x, *y).unwrap();
+        is_symbol_cell(cell)
+    })
 }
 
 fn perform_processing_1(state: LoadedState) -> Result<ProcessedState1, AError> {
     let mut counted_part_ids: HashSet<u32> = HashSet::new();
     let mut adjacent_parts: Vec<PartCell> = Vec::new();
 
-    for (y, cells) in state.iter().enumerate() {
-        for (x, cell) in cells.iter().enumerate() {
+    for y in 0..state.side_lengths.1 {
+        for x in 0..state.side_lengths.0 {
+            let cell = state.get(x, y)?;
             match cell {
-                PartCell::PartNumber { id, number: _number } => {
+                PartCell::PartNumber {
+                    id,
+                    number: _number,
+                } => {
                     if !counted_part_ids.contains(id) {
                         if is_adjacent_to_symbol(x, y, &state) {
                             counted_part_ids.insert(*id);
@@ -252,21 +199,8 @@ fn calc_result_1(state: ProcessedState1) -> Result<FinalResult, AError> {
         .sum())
 }
 
-fn get_part(x: isize, y: isize, state: &LoadedState) -> Option<PartCell> {
-    if y < 0 || x < 0 {
-        return None;
-    }
-    let y = y as usize;
-    if y >= state.len() {
-        return None;
-    }
-    let cells = state.get(y).unwrap();
-
-    let x = x as usize;
-    if x >= cells.len() {
-        return None;
-    }
-    let cell = cells.get(x).unwrap();
+fn get_part(x: usize, y: usize, state: &LoadedState) -> Option<PartCell> {
+    let cell = state.get(x, y).unwrap();
 
     match cell {
         PartCell::PartNumber { id, number } => Some(PartCell::PartNumber {
@@ -277,24 +211,24 @@ fn get_part(x: isize, y: isize, state: &LoadedState) -> Option<PartCell> {
     }
 }
 
-fn find_adjacent_parts(centre_x: usize, centre_y: usize, state: &LoadedState) -> HashSet<PartCell> {
-    ADJACENT_DELTAS
-        .iter()
-        .fold(HashSet::new(), |mut parts, (dx, dy)| {
-            let x = centre_x as isize + *dx as isize;
-            let y = centre_y as isize + *dy as isize;
-            if let Some(part) = get_part(x, y, state) {
-                parts.insert(part);
-            }
-            parts
-        })
+fn find_adjacent_parts(x: usize, y: usize, state: &LoadedState) -> HashSet<PartCell> {
+    let mut parts = HashSet::new();
+    let centre = (x, y);
+    let coords = adjacent_coords(&centre, &state.side_lengths);
+    coords.iter().for_each(|(x, y)| {
+        if let Some(part) = get_part(*x, *y, state) {
+            parts.insert(part);
+        }
+    });
+    parts
 }
 
 fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
     let mut adjacent_parts: Vec<(PartCell, PartCell)> = Vec::new();
 
-    for (y, cells) in state.iter().enumerate() {
-        for (x, cell) in cells.iter().enumerate() {
+    for y in 0..state.side_lengths.1 {
+        for x in 0..state.side_lengths.0 {
+            let cell = state.get(x, y)?;
             if let Some(parts) = match cell {
                 PartCell::Symbol('*') => {
                     let parts = find_adjacent_parts(x, y, &state);

@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::Context;
+use once_cell::sync::Lazy;
 
 type AError = anyhow::Error;
 type Delimiter = char;
@@ -81,6 +82,167 @@ pub fn read_int(
         })
 }
 
+static ADJACENT_DELTAS: Lazy<Vec<(i8, i8)>> = Lazy::new(|| {
+    Vec::from([
+        (-1, -1),
+        (0, -1),
+        (1, -1), //line above
+        (-1, 0),
+        (1, 0), //this line
+        (-1, 1),
+        (0, 1),
+        (1, 1), //line below
+    ])
+});
+
+//Get coords adjacent to the given centre, including diagonals, excluding any coords that would be outside the side lengths.
+//will only return actual coordinates (i.e. if the centre is at an edge coords over the edge will)
+//not be returned.
+pub fn adjacent_coords(
+    centre: &(usize, usize),
+    side_lengths: &(usize, usize),
+) -> Vec<(usize, usize)> {
+    ADJACENT_DELTAS
+        .iter()
+        .map(|(delta_x, delta_y)| {
+            (
+                centre.0 as isize + *delta_x as isize,
+                centre.1 as isize + *delta_y as isize,
+            )
+        })
+        .filter(|(x, y)| *x >= 0 && *y >= 0)
+        .map(|(x, y)| (x as usize, y as usize))
+        .filter(|(x, y)| *x < side_lengths.0 && *y < side_lengths.1)
+        .collect()
+}
+
+//Represents an n * m block of data
+#[derive(Debug)]
+pub struct Cells<T> {
+    contents: Vec<T>,
+    pub side_lengths: (usize, usize),
+}
+
+impl<T> Cells<T> {
+    fn in_bounds(&self, x: usize, y: usize) -> bool {
+        x < self.side_lengths.0 && y < self.side_lengths.1
+    }
+
+    pub fn get(&self, x: usize, y: usize) -> Result<&T, AError> {
+        if !self.in_bounds(x, y) {
+            return Err(AError::msg("({}, {}) is not in bounds"));
+        }
+        let index = y * self.side_lengths.0 + x;
+        let cell = self
+            .contents
+            .get(index)
+            .ok_or_else(|| AError::msg(format!("No cell value found at ({x}, {y})")))?;
+        Ok(cell)
+    }
+
+    pub fn get_mut(&mut self, x: usize, y: usize) -> Result<&mut T, AError> {
+        if !self.in_bounds(x, y) {
+            return Err(AError::msg("({}, {}) is not in bounds"));
+        }
+        let index = y * self.side_lengths.0 + x;
+        let cell = self
+            .contents
+            .get_mut(index)
+            .ok_or_else(|| AError::msg(format!("No cell value found at ({x}, {y})")))?;
+        Ok(cell)
+    }
+}
+
+//Represents a builder for a block/table of data
+#[derive(Debug)]
+pub struct CellsBuilder<T> {
+    lines: Vec<Vec<T>>,
+    max_width: usize,
+}
+
+impl<T> CellsBuilder<T> {
+    pub fn new() -> Self {
+        CellsBuilder {
+            lines: Vec::new(),
+            max_width: 0,
+        }
+    }
+
+    pub fn new_line(&mut self) {
+        self.lines.push(Vec::new());
+    }
+
+    pub fn add_cell(&mut self, cell: T) -> Result<(), AError> {
+        let current_line = self
+            .lines
+            .last_mut()
+            .ok_or_else(|| AError::msg(format!("Cannot add a cell when no line has been added")))?;
+        current_line.push(cell);
+        self.max_width = self.max_width.max(current_line.len());
+        Ok(())
+    }
+
+    pub fn get(&self, x: usize, y: usize) -> Result<&T, AError> {
+        let line = self
+            .lines
+            .get(y)
+            .ok_or_else(|| AError::msg(format!("No line for y={y} created yet")))?;
+        let cell = line
+            .get(x)
+            .ok_or_else(|| AError::msg(format!("No cell at ({x}, {y}) yet")))?;
+        Ok(cell)
+    }
+
+    pub fn get_mut(&mut self, x: usize, y: usize) -> Result<&mut T, AError> {
+        let line = self
+            .lines
+            .get_mut(y)
+            .ok_or_else(|| AError::msg(format!("No line for y={y} created yet")))?;
+        let cell = line
+            .get_mut(x)
+            .ok_or_else(|| AError::msg(format!("No cell at ({x}, {y}) yet")))?;
+        Ok(cell)
+    }
+
+    pub fn build_cells(&mut self, default_value: T) -> Result<Cells<T>, AError>
+    where
+        T: Clone,
+    {
+        if self.lines.is_empty() {
+            return Err(AError::msg(format!(
+                "No point in building cells when there are no lines"
+            )));
+        }
+        if self.max_width == 0 {
+            return Err(AError::msg(format!(
+                "No point in building cells when the width is 0"
+            )));
+        }
+
+        let lines = std::mem::take(&mut self.lines);
+        let height = lines.len();
+
+        let contents = lines.into_iter().enumerate().fold(
+            Vec::with_capacity(height * self.max_width),
+            |mut acc, (y, mut line)| {
+                let start_index = y * self.max_width;
+                for cell in line.drain(..) {
+                    acc.push(cell);
+                }
+                let expected_number_after_this_line = start_index + self.max_width;
+                while acc.len() < expected_number_after_this_line {
+                    acc.push(default_value.clone());
+                }
+                acc
+            },
+        );
+        Ok(Cells {
+            contents,
+            side_lengths: (self.max_width, height),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,5 +265,47 @@ mod tests {
             Ok(message) => assert_eq!(message, "Some Input Here+It's Good".to_string()),
             Err(e) => panic!("{}", e),
         }
+    }
+
+    #[test]
+    fn build_cells() {
+        //Arrange
+        let expected_values: Vec<[((usize, usize), char); 3]> = vec![
+            [((0, 0), 'a'), ((1, 0), 'b'), ((2, 0), 'c')],
+            [((0, 1), '1'), ((1, 1), '2'), ((2, 1), '?')],
+            [((0, 2), '-'), ((1, 2), '.'), ((2, 2), '+')],
+        ];
+        //Act
+        let mut builder: CellsBuilder<char> = CellsBuilder::new();
+        for line_vals in expected_values.iter() {
+            builder.new_line();
+            for ((_, _), value) in line_vals {
+                if *value != '?' {
+                    builder.add_cell(value.clone()).unwrap();
+                }
+            }
+        }
+        let cells = builder.build_cells('?').unwrap();
+        //Assert
+        assert_eq!((3, 3), cells.side_lengths);
+        for line_vals in expected_values.iter() {
+            for ((x, y), expected) in line_vals.iter() {
+                assert_eq!(*cells.get(*x, *y).unwrap(), *expected);
+            }
+        }
+    }
+
+    #[test]
+    fn edit_cells() {
+        let mut builder: CellsBuilder<char> = CellsBuilder::new();
+        builder.new_line();
+        builder.add_cell('a').unwrap();
+        let mut cells = builder.build_cells('?').unwrap();
+        {
+            let value = cells.get_mut(0, 0).unwrap();
+            assert_eq!(*value, 'a');
+            *value = 'b';
+        }
+        assert_eq!(*cells.get(0, 0).unwrap(), 'b');
     }
 }

@@ -151,6 +151,40 @@ impl<T> Cells<T> {
             .ok_or_else(|| AError::msg(format!("No cell value found at ({x}, {y})")))?;
         Ok(cell)
     }
+
+    pub fn iter(&self) -> CellsIter<T> {
+        CellsIter {
+            x: 0,
+            y: 0,
+            cells: self,
+        }
+    }
+}
+
+pub struct CellsIter<'a, T> {
+    x: usize,
+    y: usize,
+    cells: &'a Cells<T>,
+}
+
+impl<'a, T> Iterator for CellsIter<'a, T> {
+    type Item = ((usize, usize), &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let index = self.y * self.cells.side_lengths.0 + self.x;
+        if index >= self.cells.contents.len() {
+            return None;
+        }
+        let coord = (self.x, self.y);
+        if self.x == self.cells.side_lengths.0 - 1 {
+            self.y += 1;
+            self.x = 0;
+        } else {
+            self.x += 1;
+        }
+        let cell = self.cells.contents.get(index);
+        cell.map(|c| (coord, c))
+    }
 }
 
 //Represents a builder for a block/table of data
@@ -308,4 +342,37 @@ mod tests {
         }
         assert_eq!(*cells.get(0, 0).unwrap(), 'b');
     }
+
+    #[test]
+    fn iter_works() {
+        let mut builder: CellsBuilder<char> = CellsBuilder::new();
+        builder.new_line();
+        builder.add_cell('a').unwrap();
+        builder.add_cell('b').unwrap();
+        builder.new_line();
+        builder.add_cell('c').unwrap();
+        builder.add_cell('d').unwrap();
+
+        let cells = builder.build_cells('?').unwrap();
+
+        let items = cells.iter().fold(Vec::new(), |mut acc, ((x, y), c)| {
+            acc.push(((x, y), c));
+            acc
+        });
+
+        let expected: Vec<((usize, usize), char)> = vec![
+            ((0, 0), 'a'),
+            ((1, 0), 'b'),
+            ((0, 1), 'c'),
+            ((1, 1), 'd'),
+        ];
+
+        assert_eq!(items.len(), expected.len());
+        for (index, exp) in expected.iter().enumerate() {
+            let actual = items.get(index).unwrap();
+            assert_eq!(actual.0, exp.0);
+            assert_eq!(*actual.1, exp.1);
+        }
+    }
+
 }

@@ -86,6 +86,21 @@ fn calculate_part_cell_number(current_number: &Vec<&u64>, current_id: &mut u32) 
     part_number
 }
 
+fn write_part_numbers(
+    current_number: &mut Vec<&u64>,
+    current_id: &mut u32,
+    builder: &mut CellsBuilder<PartCell>,
+    x: usize,
+    y: usize,
+) {
+    let part_cell_number = calculate_part_cell_number(current_number, current_id);
+    for cell_index in (x - current_number.len())..x {
+        let current = builder.get_mut(cell_index, y).unwrap();
+        *current = part_cell_number.clone();
+    }
+    current_number.clear();
+}
+
 fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
     let mut current_id: u32 = 0;
     let cells = state.build_cells(Cell::Dot)?;
@@ -95,21 +110,6 @@ fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
         builder.new_line();
 
         let mut current_number = Vec::new();
-
-        fn write_part_numbers(
-            current_number: &mut Vec<&u64>,
-            current_id: &mut u32,
-            builder: &mut CellsBuilder<PartCell>,
-            x: usize,
-            y: usize,
-        ) {
-            let part_cell_number = calculate_part_cell_number(current_number, current_id);
-            for cell_index in (x - current_number.len())..x {
-                let current = builder.get_mut(cell_index, y).unwrap();
-                *current = part_cell_number.clone();
-            }
-            current_number.clear();
-        }
 
         for x in 0..cells.side_lengths.0 {
             let cell = cells.get(x, y)?;
@@ -166,23 +166,20 @@ fn perform_processing_1(state: LoadedState) -> Result<ProcessedState1, AError> {
     let mut counted_part_ids: HashSet<u32> = HashSet::new();
     let mut adjacent_parts: Vec<PartCell> = Vec::new();
 
-    for y in 0..state.side_lengths.1 {
-        for x in 0..state.side_lengths.0 {
-            let cell = state.get(x, y)?;
-            match cell {
-                PartCell::PartNumber {
-                    id,
-                    number: _number,
-                } => {
-                    if !counted_part_ids.contains(id) {
-                        if is_adjacent_to_symbol(x, y, &state) {
-                            counted_part_ids.insert(*id);
-                            adjacent_parts.push(cell.clone());
-                        }
+    for ((x, y), cell) in state.iter() {
+        match cell {
+            PartCell::PartNumber {
+                id,
+                number: _number,
+            } => {
+                if !counted_part_ids.contains(id) {
+                    if is_adjacent_to_symbol(x, y, &state) {
+                        counted_part_ids.insert(*id);
+                        adjacent_parts.push(cell.clone());
                     }
                 }
-                _ => (),
             }
+            _ => (),
         }
     }
     Ok(adjacent_parts)
@@ -226,23 +223,20 @@ fn find_adjacent_parts(x: usize, y: usize, state: &LoadedState) -> HashSet<PartC
 fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
     let mut adjacent_parts: Vec<(PartCell, PartCell)> = Vec::new();
 
-    for y in 0..state.side_lengths.1 {
-        for x in 0..state.side_lengths.0 {
-            let cell = state.get(x, y)?;
-            if let Some(parts) = match cell {
-                PartCell::Symbol('*') => {
-                    let parts = find_adjacent_parts(x, y, &state);
-                    if parts.len() == 2 {
-                        let mut parts = parts.into_iter();
-                        Some((parts.next().unwrap(), parts.next().unwrap()))
-                    } else {
-                        None
-                    }
+    for ((x, y), cell) in state.iter() {
+        if let Some(parts) = match cell {
+            PartCell::Symbol('*') => {
+                let parts = find_adjacent_parts(x, y, &state);
+                if parts.len() == 2 {
+                    let mut parts = parts.into_iter();
+                    Some((parts.next().unwrap(), parts.next().unwrap()))
+                } else {
+                    None
                 }
-                _ => None,
-            } {
-                adjacent_parts.push(parts);
             }
+            _ => None,
+        } {
+            adjacent_parts.push(parts);
         }
     }
     Ok(adjacent_parts)

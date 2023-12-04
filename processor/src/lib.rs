@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     fs::File,
     io::{BufRead, BufReader},
-    str::Chars,
+    str::{Chars, FromStr},
 };
 
 use anyhow::Context;
@@ -68,7 +68,8 @@ pub fn read_word(
     }
 }
 
-pub fn read_int(
+//FIXME: Generify this and below
+pub fn read_i64(
     chars: &mut Chars<'_>,
     delimiters: &HashSet<Delimiter>,
 ) -> Result<(i64, Option<Delimiter>), AError> {
@@ -77,9 +78,24 @@ pub fn read_int(
         .and_then(|word_and_delimiter| {
             let (word, delimiter) = word_and_delimiter;
             word.parse::<i64>()
-                .map(|i| (i, delimiter))
-                .context(format!("Failed to parse '{}' to integer", word))
-        })
+                .map(|t| (t, delimiter))
+                .map_err(|e| AError::from(e))
+            })
+}
+
+//FIXME: Generify this and above
+pub fn read_u64(
+    chars: &mut Chars<'_>,
+    delimiters: &HashSet<Delimiter>,
+) -> Result<(u64, Option<Delimiter>), AError> {
+    read_word(chars, delimiters)
+        .ok_or_else(|| AError::msg("No word found to convert to integer"))
+        .and_then(|word_and_delimiter| {
+            let (word, delimiter) = word_and_delimiter;
+            word.parse::<u64>()
+                .map(|t| (t, delimiter))
+                .map_err(|e| AError::from(e))
+            })
 }
 
 static ADJACENT_DELTAS: Lazy<Vec<(i8, i8)>> = Lazy::new(|| {

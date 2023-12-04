@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use once_cell::sync::Lazy;
-use processor::{ok_identity, process, read_word, read_i64};
+use processor::{ok_identity, process, read_i64, read_word};
 
 type AError = anyhow::Error;
 type InitialState = Vec<Game>;

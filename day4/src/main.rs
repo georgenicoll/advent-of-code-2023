@@ -1,17 +1,20 @@
-use std::collections::{HashSet, VecDeque};
+use std::{
+    collections::{HashSet, VecDeque},
+    rc::Rc,
+};
 
 use once_cell::sync::Lazy;
-use processor::{process, read_word, read_u64, read_i64};
+use processor::{process, read_i64, read_u64, read_word};
 
 type AError = anyhow::Error;
-type InitialState = Vec<Card>;
+type InitialState = Vec<Rc<Card>>;
 type LoadedState = InitialState;
 type ProcessedState = u64;
 type FinalResult = ProcessedState;
 
 #[derive(Debug, Clone)]
 struct Card {
-    card_number: u64,
+    _card_number: u64,
     card_index: usize,
     winning_numbers: HashSet<i64>,
     numbers: HashSet<i64>,
@@ -19,7 +22,8 @@ struct Card {
 
 impl Card {
     fn num_matching(&self) -> usize {
-        self.numbers.iter()
+        self.numbers
+            .iter()
             .filter(|number| self.winning_numbers.contains(*number))
             .count()
     }
@@ -65,9 +69,7 @@ fn main() {
     }
 }
 
-static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(||
-    HashSet::from([ ' ', ':' ])
-);
+static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(|| HashSet::from([' ', ':']));
 
 fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AError> {
     //Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
@@ -83,7 +85,7 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
                 Ok((number, _delimiter)) => {
                     winning_numbers.insert(number);
                     false
-                },
+                }
                 Err(_) => true,
             }
         }
@@ -96,17 +98,17 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
                 Ok((number, _delimiter)) => {
                     numbers.insert(number);
                     false
-                },
+                }
                 Err(_) => true,
             }
         }
 
-        state.push(Card {
-            card_number,
+        state.push(Rc::new(Card {
+            _card_number: card_number,
             card_index: state.len(),
             winning_numbers,
             numbers,
-        })
+        }))
     }
     Ok(state)
 }
@@ -119,26 +121,24 @@ fn finalise_state(state: InitialState) -> Result<LoadedState, AError> {
 }
 
 fn perform_processing_1(state: LoadedState) -> Result<ProcessedState, AError> {
-    let total_points = state.iter()
-        .map(|card| card.calculate_points())
-        .sum();
+    let total_points = state.iter().map(|card| card.calculate_points()).sum();
     Ok(total_points)
 }
 
 fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     let mut cards_won: u64 = 0;
-    let mut to_process: VecDeque<Card> = state.iter().fold(VecDeque::new(), |mut acc, card| {
-        acc.push_front(card.clone());
+    let mut to_process: VecDeque<Rc<Card>> = state.iter().fold(VecDeque::new(), |mut acc, card| {
+        acc.push_front(Rc::clone(card));
         acc
     });
 
-    while (!to_process.is_empty()) {
+    while !to_process.is_empty() {
         if let Some(card) = to_process.pop_front() {
             cards_won += 1;
             let num_to_add = card.num_matching();
             for i in 0..num_to_add {
                 if let Some(card_to_add) = state.get(card.card_index + i + 1) {
-                    to_process.push_back(card_to_add.clone());
+                    to_process.push_back(Rc::clone(card_to_add));
                 }
             }
         }

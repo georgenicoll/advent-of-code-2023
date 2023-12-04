@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     fs::File,
     io::{BufRead, BufReader},
-    str::{Chars, FromStr},
+    str::Chars,
 };
 
 use anyhow::Context;
@@ -79,8 +79,8 @@ pub fn read_i64(
             let (word, delimiter) = word_and_delimiter;
             word.parse::<i64>()
                 .map(|t| (t, delimiter))
-                .map_err(|e| AError::from(e))
-            })
+                .with_context(|| AError::msg(format!("Failed to convert '{}'", word)))
+        })
 }
 
 //FIXME: Generify this and above
@@ -94,8 +94,8 @@ pub fn read_u64(
             let (word, delimiter) = word_and_delimiter;
             word.parse::<u64>()
                 .map(|t| (t, delimiter))
-                .map_err(|e| AError::from(e))
-            })
+                .with_context(|| AError::msg(format!("Failed to convert '{}'", word)))
+        })
 }
 
 static ADJACENT_DELTAS: Lazy<Vec<(i8, i8)>> = Lazy::new(|| {
@@ -376,12 +376,8 @@ mod tests {
             acc
         });
 
-        let expected: Vec<((usize, usize), char)> = vec![
-            ((0, 0), 'a'),
-            ((1, 0), 'b'),
-            ((0, 1), 'c'),
-            ((1, 1), 'd'),
-        ];
+        let expected: Vec<((usize, usize), char)> =
+            vec![((0, 0), 'a'), ((1, 0), 'b'), ((0, 1), 'c'), ((1, 1), 'd')];
 
         assert_eq!(items.len(), expected.len());
         for (index, exp) in expected.iter().enumerate() {
@@ -390,5 +386,4 @@ mod tests {
             assert_eq!(*actual.1, exp.1);
         }
     }
-
 }

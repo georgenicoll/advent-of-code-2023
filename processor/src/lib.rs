@@ -83,7 +83,7 @@ pub fn read_i64(
         })
 }
 
-//FIXME: Generify this and above
+//FIXME: Generify this and below
 pub fn read_u64(
     chars: &mut Chars<'_>,
     delimiters: &HashSet<Delimiter>,
@@ -97,6 +97,25 @@ pub fn read_u64(
                 .with_context(|| AError::msg(format!("Failed to convert '{}'", word)))
         })
 }
+
+// //FIXME: Generify this and above
+// pub fn read_next<'a, T>(
+//     chars: &mut Chars<'_>,
+//     delimiters: &HashSet<Delimiter>,
+// ) -> Result<(T, Option<Delimiter>), AError>
+// where
+//     T: FromStr,
+//     T::Err: 'a, std::error::Error,
+// {
+//     read_word(chars, delimiters)
+//         .ok_or_else(|| AError::msg("No word found to convert to integer"))
+//         .and_then(|word_and_delimiter| {
+//             let (word, delimiter) = word_and_delimiter;
+//             word.parse::<T>()
+//                 .map(|t| (t, delimiter))
+//                 .context("Failed parsing next")
+//         })
+// }
 
 static ADJACENT_DELTAS: Lazy<Vec<(i8, i8)>> = Lazy::new(|| {
     Vec::from([
@@ -386,4 +405,20 @@ mod tests {
             assert_eq!(*actual.1, exp.1);
         }
     }
+
+    static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(||
+        HashSet::from(['@'])
+    );
+
+    #[test]
+    fn read_next_works() {
+        let s = "57";
+        assert_eq!(read_u64(&mut s.chars(), &DELIMITERS).unwrap(), (57u64, None));
+        assert_eq!(read_i64(&mut s.chars(), &DELIMITERS).unwrap(), (57i64, None));
+        // assert_eq!(read_next::<u64>(&mut s.chars(), &DELIMITERS).unwrap(), (57u64, None));
+        // assert_eq!(read_next::<i64>(&mut s.chars(), &DELIMITERS).unwrap(), (57i64, None));
+        // assert_eq!(read_next::<u32>(&mut s.chars(), &DELIMITERS).unwrap(), (57u32, None));
+        // assert_eq!(read_next::<usize>(&mut s.chars(), &DELIMITERS).unwrap(), (57usize, None));
+    }
+
 }

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use once_cell::sync::Lazy;
-use processor::{process, read_word, read_next};
+use processor::{process, read_next, read_word};
 
 type AError = anyhow::Error;
 type InitialState = Vec<Card>;

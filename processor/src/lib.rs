@@ -1,8 +1,9 @@
 use std::{
     collections::HashSet,
+    error::Error,
     fs::File,
     io::{BufRead, BufReader},
-    str::{Chars, FromStr}, error::Error,
+    str::{Chars, FromStr},
 };
 
 use anyhow::Context;
@@ -70,12 +71,12 @@ pub fn read_word(
 
 /// Read the next word and parse it to a type implementing FromStr
 pub fn read_next<'a, T>(
-     chars: &mut Chars<'_>,
+    chars: &mut Chars<'_>,
     delimiters: &HashSet<Delimiter>,
 ) -> Result<(T, Option<Delimiter>), AError>
 where
     T: FromStr,
-    T::Err: Error + Send + Sync + 'static
+    T::Err: Error + Send + Sync + 'static,
 {
     read_word(chars, delimiters)
         .ok_or_else(|| AError::msg("No word found to convert to integer"))
@@ -375,17 +376,26 @@ mod tests {
         }
     }
 
-    static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(||
-        HashSet::from(['@'])
-    );
+    static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(|| HashSet::from(['@']));
 
     #[test]
     fn read_next_works() {
         let s = "57";
-        assert_eq!(read_next::<u64>(&mut s.chars(), &DELIMITERS).unwrap(), (57u64, None));
-        assert_eq!(read_next::<i64>(&mut s.chars(), &DELIMITERS).unwrap(), (57i64, None));
-        assert_eq!(read_next::<u32>(&mut s.chars(), &DELIMITERS).unwrap(), (57u32, None));
-        assert_eq!(read_next::<usize>(&mut s.chars(), &DELIMITERS).unwrap(), (57usize, None));
+        assert_eq!(
+            read_next::<u64>(&mut s.chars(), &DELIMITERS).unwrap(),
+            (57u64, None)
+        );
+        assert_eq!(
+            read_next::<i64>(&mut s.chars(), &DELIMITERS).unwrap(),
+            (57i64, None)
+        );
+        assert_eq!(
+            read_next::<u32>(&mut s.chars(), &DELIMITERS).unwrap(),
+            (57u32, None)
+        );
+        assert_eq!(
+            read_next::<usize>(&mut s.chars(), &DELIMITERS).unwrap(),
+            (57usize, None)
+        );
     }
-
 }

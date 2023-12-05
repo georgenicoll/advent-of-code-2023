@@ -98,6 +98,21 @@ pub fn read_u64(
         })
 }
 
+//FIXME: Generify this and below
+pub fn read_usize(
+    chars: &mut Chars<'_>,
+    delimiters: &HashSet<Delimiter>,
+) -> Result<(usize, Option<Delimiter>), AError> {
+    read_word(chars, delimiters)
+        .ok_or_else(|| AError::msg("No word found to convert to integer"))
+        .and_then(|word_and_delimiter| {
+            let (word, delimiter) = word_and_delimiter;
+            word.parse::<usize>()
+                .map(|t| (t, delimiter))
+                .with_context(|| AError::msg(format!("Failed to convert '{}'", word)))
+        })
+}
+
 // //FIXME: Generify this and above
 // pub fn read_next<'a, T>(
 //     chars: &mut Chars<'_>,

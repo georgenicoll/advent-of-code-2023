@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use once_cell::sync::Lazy;
-use processor::{ok_identity, process, read_i64, read_word};
+use processor::{ok_identity, process, read_word, read_next};
 
 type AError = anyhow::Error;
 type InitialState = Vec<Game>;
@@ -52,11 +52,11 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
     let mut chars = line.chars();
     //Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green
     if let Some(_game) = read_word(&mut chars, &DELIMITERS) {
-        let (number, _delimiter) = read_i64(&mut chars, &DELIMITERS)?;
+        let (number, _delimiter) = read_next::<i64>(&mut chars, &DELIMITERS)?;
         let mut picks = Vec::new();
         let mut cubes: HashMap<String, i64> = HashMap::new();
 
-        let mut num_cubes_and_delimiter = read_i64(&mut chars, &DELIMITERS);
+        let mut num_cubes_and_delimiter = read_next::<i64>(&mut chars, &DELIMITERS);
         while num_cubes_and_delimiter.is_ok() {
             let (num_cubes, _) = num_cubes_and_delimiter.as_ref().ok().unwrap();
             let (colour, delimiter) = read_word(&mut chars, &DELIMITERS).ok_or_else(|| {
@@ -71,7 +71,7 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
                 picks.push(cubes);
                 cubes = HashMap::new();
             }
-            num_cubes_and_delimiter = read_i64(&mut chars, &DELIMITERS);
+            num_cubes_and_delimiter = read_next::<i64>(&mut chars, &DELIMITERS);
         }
 
         state.push(Game { number, picks });

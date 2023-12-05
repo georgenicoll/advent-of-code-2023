@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     fs::File,
     io::{BufRead, BufReader},
-    str::Chars,
+    str::{Chars, FromStr}, error::Error,
 };
 
 use anyhow::Context;
@@ -38,8 +38,8 @@ pub fn reverse(s: &str) -> String {
     s.chars().rev().collect()
 }
 
-// Read a word for the current positions of chars, advancing to the next non-delimiter and reading to the end
-// or the next delimiter
+/// Read a word for the current positions of chars, advancing to the next non-delimiter and reading to the end
+/// or the next delimiter
 pub fn read_word(
     chars: &mut Chars<'_>,
     delimiters: &HashSet<Delimiter>,
@@ -68,69 +68,24 @@ pub fn read_word(
     }
 }
 
-//FIXME: Generify this and below
-pub fn read_i64(
-    chars: &mut Chars<'_>,
+/// Read the next word and parse it to a type implementing FromStr
+pub fn read_next<'a, T>(
+     chars: &mut Chars<'_>,
     delimiters: &HashSet<Delimiter>,
-) -> Result<(i64, Option<Delimiter>), AError> {
+) -> Result<(T, Option<Delimiter>), AError>
+where
+    T: FromStr,
+    T::Err: Error + Send + Sync + 'static
+{
     read_word(chars, delimiters)
         .ok_or_else(|| AError::msg("No word found to convert to integer"))
         .and_then(|word_and_delimiter| {
             let (word, delimiter) = word_and_delimiter;
-            word.parse::<i64>()
+            word.parse::<T>()
                 .map(|t| (t, delimiter))
-                .with_context(|| AError::msg(format!("Failed to convert '{}'", word)))
+                .with_context(|| format!("Failed parsing word: '{}'", word))
         })
 }
-
-//FIXME: Generify this and below
-pub fn read_u64(
-    chars: &mut Chars<'_>,
-    delimiters: &HashSet<Delimiter>,
-) -> Result<(u64, Option<Delimiter>), AError> {
-    read_word(chars, delimiters)
-        .ok_or_else(|| AError::msg("No word found to convert to integer"))
-        .and_then(|word_and_delimiter| {
-            let (word, delimiter) = word_and_delimiter;
-            word.parse::<u64>()
-                .map(|t| (t, delimiter))
-                .with_context(|| AError::msg(format!("Failed to convert '{}'", word)))
-        })
-}
-
-//FIXME: Generify this and below
-pub fn read_usize(
-    chars: &mut Chars<'_>,
-    delimiters: &HashSet<Delimiter>,
-) -> Result<(usize, Option<Delimiter>), AError> {
-    read_word(chars, delimiters)
-        .ok_or_else(|| AError::msg("No word found to convert to integer"))
-        .and_then(|word_and_delimiter| {
-            let (word, delimiter) = word_and_delimiter;
-            word.parse::<usize>()
-                .map(|t| (t, delimiter))
-                .with_context(|| AError::msg(format!("Failed to convert '{}'", word)))
-        })
-}
-
-// //FIXME: Generify this and above
-// pub fn read_next<'a, T>(
-//     chars: &mut Chars<'_>,
-//     delimiters: &HashSet<Delimiter>,
-// ) -> Result<(T, Option<Delimiter>), AError>
-// where
-//     T: FromStr,
-//     T::Err: 'a, std::error::Error,
-// {
-//     read_word(chars, delimiters)
-//         .ok_or_else(|| AError::msg("No word found to convert to integer"))
-//         .and_then(|word_and_delimiter| {
-//             let (word, delimiter) = word_and_delimiter;
-//             word.parse::<T>()
-//                 .map(|t| (t, delimiter))
-//                 .context("Failed parsing next")
-//         })
-// }
 
 static ADJACENT_DELTAS: Lazy<Vec<(i8, i8)>> = Lazy::new(|| {
     Vec::from([
@@ -145,9 +100,8 @@ static ADJACENT_DELTAS: Lazy<Vec<(i8, i8)>> = Lazy::new(|| {
     ])
 });
 
-//Get coords adjacent to the given centre, including diagonals, excluding any coords that would be outside the side lengths.
-//will only return actual coordinates (i.e. if the centre is at an edge coords over the edge will)
-//not be returned.
+/// Get coords adjacent to the given centre, including diagonals, excluding any coords that would be outside the side lengths.
+/// This will only return actual coordinates (i.e. if the centre is at an edge coords over the edge will not be returned).
 pub fn adjacent_coords(
     centre: &(usize, usize),
     side_lengths: &(usize, usize),
@@ -166,7 +120,7 @@ pub fn adjacent_coords(
         .collect()
 }
 
-//Represents an n * m block of data
+/// Represents an n * m block of data
 #[derive(Debug)]
 pub struct Cells<T> {
     contents: Vec<T>,
@@ -237,7 +191,7 @@ impl<'a, T> Iterator for CellsIter<'a, T> {
     }
 }
 
-//Represents a builder for a block/table of data
+/// Represents a builder for a block/table of data
 #[derive(Debug)]
 pub struct CellsBuilder<T> {
     lines: Vec<Vec<T>>,
@@ -428,12 +382,10 @@ mod tests {
     #[test]
     fn read_next_works() {
         let s = "57";
-        assert_eq!(read_u64(&mut s.chars(), &DELIMITERS).unwrap(), (57u64, None));
-        assert_eq!(read_i64(&mut s.chars(), &DELIMITERS).unwrap(), (57i64, None));
-        // assert_eq!(read_next::<u64>(&mut s.chars(), &DELIMITERS).unwrap(), (57u64, None));
-        // assert_eq!(read_next::<i64>(&mut s.chars(), &DELIMITERS).unwrap(), (57i64, None));
-        // assert_eq!(read_next::<u32>(&mut s.chars(), &DELIMITERS).unwrap(), (57u32, None));
-        // assert_eq!(read_next::<usize>(&mut s.chars(), &DELIMITERS).unwrap(), (57usize, None));
+        assert_eq!(read_next::<u64>(&mut s.chars(), &DELIMITERS).unwrap(), (57u64, None));
+        assert_eq!(read_next::<i64>(&mut s.chars(), &DELIMITERS).unwrap(), (57i64, None));
+        assert_eq!(read_next::<u32>(&mut s.chars(), &DELIMITERS).unwrap(), (57u32, None));
+        assert_eq!(read_next::<usize>(&mut s.chars(), &DELIMITERS).unwrap(), (57usize, None));
     }
 
 }

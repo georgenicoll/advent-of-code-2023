@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use once_cell::sync::Lazy;
-use processor::{process, read_i64, read_u64, read_word};
+use processor::{process, read_word, read_next};
 
 type AError = anyhow::Error;
 type InitialState = Vec<Card>;
@@ -71,12 +71,12 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
     //Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
     let mut chars = line.chars();
     if let Some(_card) = read_word(&mut chars, &DELIMITERS) {
-        let (card_number, _) = read_u64(&mut chars, &DELIMITERS)?;
+        let (card_number, _) = read_next::<u64>(&mut chars, &DELIMITERS)?;
 
         let mut winning_numbers: HashSet<i64> = HashSet::new();
         let mut done_winning = false;
         while !done_winning {
-            let number_and_delim = read_i64(&mut chars, &DELIMITERS);
+            let number_and_delim = read_next::<i64>(&mut chars, &DELIMITERS);
             done_winning = match number_and_delim {
                 Ok((number, _delimiter)) => {
                     winning_numbers.insert(number);
@@ -89,7 +89,7 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
         let mut numbers: HashSet<i64> = HashSet::new();
         let mut done_numbers = false;
         while !done_numbers {
-            let number_and_delim = read_i64(&mut chars, &DELIMITERS);
+            let number_and_delim = read_next::<i64>(&mut chars, &DELIMITERS);
             done_numbers = match number_and_delim {
                 Ok((number, _delimiter)) => {
                     numbers.insert(number);

@@ -1,7 +1,7 @@
 use std::{collections::HashSet, cmp::Ordering};
 
 use once_cell::sync::Lazy;
-use processor::{process, read_word, read_usize};
+use processor::{process, read_word, read_next};
 
 type Seeds = Vec<usize>;
 
@@ -116,7 +116,7 @@ fn load_seeds(seeds: &mut Seeds, line: String) {
     let _seeds = read_word(&mut chars, &DELIMITERS).unwrap();
     let mut keep_reading = true;
     while keep_reading {
-        keep_reading = match read_usize(&mut chars, &DELIMITERS) {
+        keep_reading = match read_next::<usize>(&mut chars, &DELIMITERS) {
             Ok((seed, delimiter)) => {
                 seeds.push(seed);
                 delimiter.is_some()
@@ -130,10 +130,10 @@ fn load_seeds(seeds: &mut Seeds, line: String) {
 
 fn load_mapping_line(mapping: &mut Mapping, line: String) {
     let mut chars = line.chars();
-    match read_usize(&mut chars, &DELIMITERS) {
+    match read_next::<usize>(&mut chars, &DELIMITERS) {
         Ok((destination_start, _)) => {
-            let (source_start, _) = read_usize(&mut chars, &DELIMITERS).unwrap();
-            let (length, _) = read_usize(&mut chars, &DELIMITERS).unwrap();
+            let (source_start, _) = read_next::<usize>(&mut chars, &DELIMITERS).unwrap();
+            let (length, _) = read_next::<usize>(&mut chars, &DELIMITERS).unwrap();
             mapping.push(IndexMap {
                 source_start,
                 destination_start,

@@ -214,21 +214,156 @@ fn perform_processing_1(state: LoadedState) -> Result<ProcessedState, AError> {
     Ok(minimum)
 }
 
-//FIXME: Should be able to make this much more efficient
+fn add_destination_ranges(start: usize, length: usize, mapping: &Mapping, destination_ranges: &mut Vec<(usize, usize)>) {
+    let mut length_remaining = length;
+    let mut current_index = start;
+
+    let mut mapping_iter = mapping.iter();
+    let mut current_index_map = mapping_iter.next();
+
+    while length_remaining > 0 && current_index_map.is_some() {
+        let index_map = current_index_map.unwrap();
+        let last_index = current_index + length_remaining - 1;
+        let last_map_index = index_map.source_start + index_map.length - 1;
+        //everything before the index_map, if so drop out
+        if last_index < index_map.source_start {
+            break;
+        }
+        //are we after the index map? Move to the next one
+        if current_index > last_map_index {
+            current_index_map = mapping_iter.next();
+            continue;
+        }
+        //anything before the index map?
+        if current_index < index_map.source_start {
+            //something is in the index map - add a range up to the map and adjust
+            let length_to_consume = index_map.source_start - current_index;
+            destination_ranges.push((current_index, length_to_consume));
+            current_index = index_map.source_start;
+            length_remaining -= length_to_consume;
+            continue;
+        }
+        //must be in the index map then
+        let next_index = last_index.min(last_map_index) + 1;
+        let length_to_consume = next_index - current_index;
+        let destination_index = index_map.destination_start + (current_index - index_map.source_start);
+        destination_ranges.push((destination_index, length_to_consume));
+        current_index = next_index;
+        length_remaining -= length_to_consume;
+    }
+
+    if length_remaining > 0 {
+        destination_ranges.push((current_index, length_remaining));
+    }
+}
+
+fn get_destination_ranges(source_ranges: Vec<(usize, usize)>, mapping: &Mapping) -> Vec<(usize, usize)> {
+    let mut destination_ranges = Vec::new();
+    for (start, length) in source_ranges {
+        add_destination_ranges(start, length, mapping, &mut destination_ranges);
+    }
+    destination_ranges
+}
+
+fn get_location_ranges(start_seed: usize, length: usize, mappings: &Mappings) -> Vec<(usize, usize)> {
+    let soil_ranges = get_destination_ranges(Vec::from([(start_seed, length)]), &mappings.seed_to_soil);
+    let fertilizer_ranges = get_destination_ranges(soil_ranges, &mappings.soil_to_fertilizer);
+    let water_ranges = get_destination_ranges(fertilizer_ranges, &mappings.fertilizer_to_water);
+    let light_ranges = get_destination_ranges(water_ranges, &mappings.water_to_light);
+    let temperature_ranges = get_destination_ranges(light_ranges, &mappings.light_to_temperature);
+    let humidity_ranges = get_destination_ranges(temperature_ranges, &mappings.temperature_to_humidity);
+    get_destination_ranges(humidity_ranges, &mappings.humidity_to_location)
+}
+
 fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     let minimum = state.seeds.chunks_exact(2).fold(usize::MAX, |min_so_far, start_length| {
-        let mut minimum = min_so_far;
         let start = start_length[0];
         let length = start_length[1];
-        for seed in start..(start + length) {
-            let location = calculate_location(&seed, &state.mappings);
-            minimum = minimum.min(location);
-        }
-        minimum
+        let location_ranges = get_location_ranges(start, length, &state.mappings);
+        location_ranges.iter().fold(min_so_far, |min, (start, _)| min.min(*start))
     });
     Ok(minimum)
 }
 
 fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {
     Ok(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn range_before_any_index_map() {
+        let mapping = vec![
+            IndexMap { source_start: 10, destination_start: 20, length: 5, },
+        ];
+        let mut ranges = Vec::new();
+        add_destination_ranges(3, 6, &mapping, &mut ranges);
+        assert_eq!(ranges, vec![(3, 6)]);
+    }
+
+    #[test]
+    fn range_just_before_any_index_map() {
+        let mapping = vec![
+            IndexMap { source_start: 10, destination_start: 20, length: 5, },
+        ];
+        let mut ranges = Vec::new();
+        add_destination_ranges(3, 7, &mapping, &mut ranges);
+        assert_eq!(ranges, vec![(3, 7)]);
+    }
+
+    #[test]
+    fn range_overlapping_start_of_first_index_map() {
+        let mapping = vec![
+            IndexMap { source_start: 10, destination_start: 20, length: 5, },
+        ];
+        let mut ranges = Vec::new();
+        add_destination_ranges(8, 6, &mapping, &mut ranges);
+        assert_eq!(ranges, vec![(8, 2), (20, 4)]);
+    }
+
+    #[test]
+    fn range_overlapping_first_index_map() {
+        let mapping = vec![
+            IndexMap { source_start: 10, destination_start: 20, length: 2, },
+        ];
+        let mut ranges = Vec::new();
+        add_destination_ranges(8, 6, &mapping, &mut ranges);
+        assert_eq!(ranges, vec![(8, 2), (20, 2), (12, 2)]);
+    }
+
+    #[test]
+    fn range_overlapping_first_and_second_map() {
+        let mapping = vec![
+            IndexMap { source_start: 10, destination_start: 20, length: 2, },
+            IndexMap { source_start: 14, destination_start: 24, length: 2, },
+        ];
+        let mut ranges = Vec::new();
+        add_destination_ranges(8, 10, &mapping, &mut ranges);
+        assert_eq!(ranges, vec![(8, 2), (20, 2), (12, 2), (24, 2), (16, 2)]);
+    }
+
+    #[test]
+    fn range_overlapping_first_and_second_map_maps_next_to_each_other() {
+        let mapping = vec![
+            IndexMap { source_start: 10, destination_start: 20, length: 2, },
+            IndexMap { source_start: 12, destination_start: 30, length: 2, },
+        ];
+        let mut ranges = Vec::new();
+        add_destination_ranges(8, 8, &mapping, &mut ranges);
+        assert_eq!(ranges, vec![(8, 2), (20, 2), (30, 2), (14, 2)]);
+    }
+
+    #[test]
+    fn range_after_the_maps() {
+        let mapping = vec![
+            IndexMap { source_start: 10, destination_start: 20, length: 2, },
+            IndexMap { source_start: 12, destination_start: 30, length: 2, },
+        ];
+        let mut ranges = Vec::new();
+        add_destination_ranges(14, 2, &mapping, &mut ranges);
+        assert_eq!(ranges, vec![(14, 2)]);
+    }
+
 }

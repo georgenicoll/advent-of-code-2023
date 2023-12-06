@@ -110,18 +110,27 @@ fn caclulate_distance_for_hold_time(hold_time: &u64, race_stats: &RaceStats) -> 
     (race_stats.time - hold_time) * speed
 }
 
-fn find_winning_combinations(race_stats: &RaceStats) -> Vec<u64> {
-    //Ignore 0 and the max time as both result in 0
-    (1..race_stats.time - 1)
-        .map(|hold_time| caclulate_distance_for_hold_time(&hold_time, race_stats))
-        .filter(|distance| *distance > race_stats.record_distance)
-        .collect()
+fn find_winning_combinations(race_stats: &RaceStats) -> u64 {
+    let first_winning_time = (1..(race_stats.time - 1))
+        .find(|hold_time| {
+            let distance = caclulate_distance_for_hold_time(hold_time, race_stats);
+            distance > race_stats.record_distance
+        })
+        .expect("Failed to find the first winning time");
+    let last_winning_time = (1..(race_stats.time - 1))
+        .rev()
+        .find(|hold_time| {
+            let distance = caclulate_distance_for_hold_time(hold_time, race_stats);
+            distance > race_stats.record_distance
+        })
+        .expect("Failed to find the last winning time");
+    last_winning_time - first_winning_time + 1
 }
 
 fn perform_processing_1(state: LoadedState1) -> Result<ProcessedState1, AError> {
     let numbers_of_winning_possibilities = state
         .iter()
-        .map(|race_stats| find_winning_combinations(race_stats).len() as u64)
+        .map(find_winning_combinations)
         .collect();
     Ok(numbers_of_winning_possibilities)
 }

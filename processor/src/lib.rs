@@ -249,12 +249,12 @@ impl<T> CellsBuilder<T> {
     {
         if self.lines.is_empty() {
             return Err(AError::msg(
-                "No point in building cells when there are no lines"
+                "No point in building cells when there are no lines",
             ));
         }
         if self.max_width == 0 {
             return Err(AError::msg(
-                "No point in building cells when the width is 0"
+                "No point in building cells when the width is 0",
             ));
         }
 

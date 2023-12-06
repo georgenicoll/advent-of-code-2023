@@ -65,7 +65,7 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
                     num_cubes, line
                 ))
             })?;
-            cubes.insert(colour, num_cubes.clone());
+            cubes.insert(colour, *num_cubes);
             let end_of_pick = delimiter.map(|c| c == ';').unwrap_or(true);
             if end_of_pick {
                 picks.push(cubes);
@@ -101,7 +101,7 @@ fn perform_processing_1(state: LoadedState) -> Result<ProcessedState, AError> {
             //println!("Possible: {:?}", game);
             game.number
         })
-        .fold(0, |acc, number| acc + number);
+        .sum();
 
     Ok(possible_games)
 }
@@ -129,6 +129,6 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
             power
         })
         .collect::<Vec<i64>>();
-    let result = powers.iter().fold(0, |acc, power| acc + power);
+    let result = powers.iter().sum();
     Ok(result)
 }

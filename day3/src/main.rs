@@ -30,7 +30,7 @@ fn main() {
 
     let result1 = process(
         file,
-        CellsBuilder::new(),
+        CellsBuilder::new_empty(),
         parse_line,
         finalise_state,
         perform_processing_1,
@@ -43,7 +43,7 @@ fn main() {
 
     let result2 = process(
         file,
-        CellsBuilder::new(),
+        CellsBuilder::new_empty(),
         parse_line,
         finalise_state,
         perform_processing_2,
@@ -70,7 +70,7 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
     Ok(state)
 }
 
-fn calculate_part_cell_number(current_number: &Vec<&u64>, current_id: &mut u32) -> PartCell {
+fn calculate_part_cell_number(current_number: &[&u64], current_id: &mut u32) -> PartCell {
     let part_number = current_number
         .iter()
         .rev()
@@ -82,7 +82,7 @@ fn calculate_part_cell_number(current_number: &Vec<&u64>, current_id: &mut u32) 
         id: *current_id,
         number: part_number,
     };
-    *current_id = *current_id + 1;
+    *current_id += 1;
     part_number
 }
 
@@ -96,7 +96,7 @@ fn write_part_numbers(
     let part_cell_number = calculate_part_cell_number(current_number, current_id);
     for cell_index in (x - current_number.len())..x {
         let current = builder.get_mut(cell_index, y).unwrap();
-        *current = part_cell_number.clone();
+        *current = part_cell_number;
     }
     current_number.clear();
 }
@@ -105,7 +105,7 @@ fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
     let mut current_id: u32 = 0;
     let cells = state.build_cells(Cell::Dot)?;
 
-    let mut builder = CellsBuilder::new();
+    let mut builder = CellsBuilder::new_empty();
     for y in 0..cells.side_lengths.1 {
         builder.new_line();
 
@@ -147,10 +147,7 @@ fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
 }
 
 fn is_symbol_cell(cell: &PartCell) -> bool {
-    match cell {
-        PartCell::Symbol(_) => true,
-        _ => false,
-    }
+    matches!(cell, PartCell::Symbol(_))
 }
 
 fn is_adjacent_to_symbol(x: usize, y: usize, state: &LoadedState) -> bool {
@@ -167,19 +164,15 @@ fn perform_processing_1(state: LoadedState) -> Result<ProcessedState1, AError> {
     let mut adjacent_parts: Vec<PartCell> = Vec::new();
 
     for ((x, y), cell) in state.iter() {
-        match cell {
-            PartCell::PartNumber {
-                id,
-                number: _number,
-            } => {
-                if !counted_part_ids.contains(id) {
-                    if is_adjacent_to_symbol(x, y, &state) {
-                        counted_part_ids.insert(*id);
-                        adjacent_parts.push(cell.clone());
-                    }
-                }
+        if let PartCell::PartNumber {
+            id,
+            number: _number,
+        } = cell
+        {
+            if !counted_part_ids.contains(id) && is_adjacent_to_symbol(x, y, &state) {
+                counted_part_ids.insert(*id);
+                adjacent_parts.push(*cell);
             }
-            _ => (),
         }
     }
     Ok(adjacent_parts)
@@ -190,7 +183,7 @@ fn calc_result_1(state: ProcessedState1) -> Result<FinalResult, AError> {
     Ok(state
         .iter()
         .map(|p| match p {
-            PartCell::PartNumber { id: _id, number } => number.clone(),
+            PartCell::PartNumber { id: _id, number } => *number,
             _ => 0u64,
         })
         .sum())

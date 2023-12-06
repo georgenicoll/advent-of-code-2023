@@ -143,23 +143,20 @@ fn load_seeds(seeds: &mut Seeds, line: String) {
 
 fn load_mapping_line(mapping: &mut Mapping, line: String) {
     let mut chars = line.chars();
-    match read_next::<usize>(&mut chars, &DELIMITERS) {
-        Ok((destination_start, _)) => {
-            let (source_start, _) = read_next::<usize>(&mut chars, &DELIMITERS).unwrap();
-            let (length, _) = read_next::<usize>(&mut chars, &DELIMITERS).unwrap();
-            mapping.push(IndexMap {
-                source_start,
-                destination_start,
-                length,
-            });
-        }
-        Err(_) => (),
+    if let Ok((destination_start, _)) = read_next::<usize>(&mut chars, &DELIMITERS) {
+        let (source_start, _) = read_next::<usize>(&mut chars, &DELIMITERS).unwrap();
+        let (length, _) = read_next::<usize>(&mut chars, &DELIMITERS).unwrap();
+        mapping.push(IndexMap {
+            source_start,
+            destination_start,
+            length,
+        });
     }
 }
 
 fn parse_line(istate: InitialState, line: String) -> Result<InitialState, AError> {
     let (loading_state, mut state) = istate;
-    let next_loading_state = if line.trim().len() == 0 {
+    let next_loading_state = if line.is_empty() {
         get_next_loading_state(loading_state)
     } else {
         match loading_state {
@@ -227,8 +224,7 @@ fn calculate_location(seed: &usize, mappings: &Mappings) -> usize {
     let light = get_destination(water, &mappings.water_to_light);
     let temp = get_destination(light, &mappings.light_to_temperature);
     let humidity = get_destination(temp, &mappings.temperature_to_humidity);
-    let location = get_destination(humidity, &mappings.humidity_to_location);
-    location
+    get_destination(humidity, &mappings.humidity_to_location)
 }
 
 fn perform_processing_1(state: LoadedState) -> Result<ProcessedState, AError> {

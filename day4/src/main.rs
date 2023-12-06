@@ -127,7 +127,7 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     copies.resize(state.len(), 1);
 
     for i in 0..copies.len() {
-        let num_copies = copies.get(i).unwrap().clone();
+        let num_copies = *copies.get(i).unwrap();
         cards_won += num_copies as u64;
         let card = state.get(i).unwrap();
         let num_matching = card.num_matching();

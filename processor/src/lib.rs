@@ -70,7 +70,7 @@ pub fn read_word(
 }
 
 /// Read the next word and parse it to a type implementing FromStr
-pub fn read_next<'a, T>(
+pub fn read_next<T>(
     chars: &mut Chars<'_>,
     delimiters: &HashSet<Delimiter>,
 ) -> Result<(T, Option<Delimiter>), AError>
@@ -193,14 +193,14 @@ impl<'a, T> Iterator for CellsIter<'a, T> {
 }
 
 /// Represents a builder for a block/table of data
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CellsBuilder<T> {
     lines: Vec<Vec<T>>,
     max_width: usize,
 }
 
 impl<T> CellsBuilder<T> {
-    pub fn new() -> Self {
+    pub fn new_empty() -> Self {
         CellsBuilder {
             lines: Vec::new(),
             max_width: 0,
@@ -215,7 +215,7 @@ impl<T> CellsBuilder<T> {
         let current_line = self
             .lines
             .last_mut()
-            .ok_or_else(|| AError::msg(format!("Cannot add a cell when no line has been added")))?;
+            .ok_or_else(|| AError::msg("Cannot add a cell when no line has been added"))?;
         current_line.push(cell);
         self.max_width = self.max_width.max(current_line.len());
         Ok(())
@@ -248,14 +248,14 @@ impl<T> CellsBuilder<T> {
         T: Clone,
     {
         if self.lines.is_empty() {
-            return Err(AError::msg(format!(
+            return Err(AError::msg(
                 "No point in building cells when there are no lines"
-            )));
+            ));
         }
         if self.max_width == 0 {
-            return Err(AError::msg(format!(
+            return Err(AError::msg(
                 "No point in building cells when the width is 0"
-            )));
+            ));
         }
 
         let lines = std::mem::take(&mut self.lines);

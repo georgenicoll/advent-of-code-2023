@@ -25,9 +25,9 @@ type ProcessedState2 = u64;
 type FinalResult = u64;
 
 fn main() {
-    //let file = "test-input.txt";
+    let file = "test-input.txt";
     //let file = "test-input2.txt";
-    let file = "input.txt";
+    //let file = "input.txt";
 
     let result1 = process(
         file,
@@ -127,11 +127,47 @@ fn find_winning_combinations(race_stats: &RaceStats) -> u64 {
     last_winning_time - first_winning_time + 1
 }
 
+fn find_winning_combinations_quadratic(race_stats: &RaceStats) -> u64 {
+    let a = -1f64;
+    let b = race_stats.time as f64;
+    let c = -(race_stats.record_distance as f64);
+
+    let b_squared = b.powf(2f64);
+    let _4_a_c = 4f64 * a * c;
+    let b_squared_minus_4ac = b_squared - _4_a_c;
+    let sqrt_b_squared_minus_4ac = b_squared_minus_4ac.sqrt();
+    let _2_a = 2f64 * a;
+
+    let positive_root = (-b + sqrt_b_squared_minus_4ac) / _2_a;
+    let negative_root = (-b - sqrt_b_squared_minus_4ac) / _2_a;
+
+    let (lower, upper) = if positive_root > negative_root {
+        (negative_root, positive_root)
+    } else {
+        (positive_root, negative_root)
+    };
+
+    let low_time = {
+        let lower = lower.floor() as u64;
+        if caclulate_distance_for_hold_time(&lower, race_stats) > race_stats.record_distance {
+            lower
+        } else {
+            lower + 1
+        }
+    };
+    let high_time = {
+        let upper = upper.ceil() as u64;
+        if caclulate_distance_for_hold_time(&upper, race_stats) > race_stats.record_distance {
+            upper
+        } else {
+            upper - 1
+        }
+    };
+    high_time - low_time + 1
+}
+
 fn perform_processing_1(state: LoadedState1) -> Result<ProcessedState1, AError> {
-    let numbers_of_winning_possibilities = state
-        .iter()
-        .map(find_winning_combinations)
-        .collect();
+    let numbers_of_winning_possibilities = state.iter().map(find_winning_combinations).collect();
     Ok(numbers_of_winning_possibilities)
 }
 
@@ -164,20 +200,8 @@ fn finalise_state_2(istate: InitialState) -> Result<LoadedState2, AError> {
 }
 
 fn perform_processing_2(state: LoadedState2) -> Result<ProcessedState2, AError> {
-    let first_winning_time = (1..(state.time - 1))
-        .find(|hold_time| {
-            let distance = caclulate_distance_for_hold_time(hold_time, &state);
-            distance > state.record_distance
-        })
-        .ok_or_else(|| AError::msg("Failed to find the first winning time"))?;
-    let last_winning_time = (1..(state.time - 1))
-        .rev()
-        .find(|hold_time| {
-            let distance = caclulate_distance_for_hold_time(hold_time, &state);
-            distance > state.record_distance
-        })
-        .ok_or_else(|| AError::msg("Failed to find the last winning time"))?;
-    Ok(last_winning_time - first_winning_time + 1)
+    let num = find_winning_combinations_quadratic(&state);
+    Ok(num)
 }
 
 fn calc_result_2(state: ProcessedState2) -> Result<FinalResult, AError> {

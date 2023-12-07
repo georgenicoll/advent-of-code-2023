@@ -167,7 +167,7 @@ fn find_winning_combinations_quadratic(race_stats: &RaceStats) -> u64 {
 }
 
 fn perform_processing_1(state: LoadedState1) -> Result<ProcessedState1, AError> {
-    let numbers_of_winning_possibilities = state.iter().map(find_winning_combinations).collect();
+    let numbers_of_winning_possibilities = state.iter().map(find_winning_combinations_quadratic).collect();
     Ok(numbers_of_winning_possibilities)
 }
 

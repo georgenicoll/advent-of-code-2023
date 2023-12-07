@@ -297,11 +297,11 @@ fn categorize_hand_2(hand: &Hand) -> HandType {
 }
 
 fn finalise_state_2(state: InitialState) -> Result<LoadedState, AError> {
-    let mut jacks_strength_updated: Vec<Hand> = state.iter().map(update_jack_strength).collect();
-    jacks_strength_updated.iter_mut().for_each(|hand| {
+    let mut state_updated: Vec<Hand> = state.iter().map(update_jack_strength).collect();
+    state_updated.iter_mut().for_each(|hand| {
         hand.hand_type = categorize_hand_2(hand);
     });
-    Ok(jacks_strength_updated)
+    Ok(state_updated)
 }
 
 fn compare_cards(cards1: &[Card], cards2: &[Card]) -> Ordering {

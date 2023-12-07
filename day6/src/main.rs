@@ -110,22 +110,22 @@ fn caclulate_distance_for_hold_time(hold_time: &u64, race_stats: &RaceStats) -> 
     (race_stats.time - hold_time) * speed
 }
 
-fn find_winning_combinations(race_stats: &RaceStats) -> u64 {
-    let first_winning_time = (1..(race_stats.time - 1))
-        .find(|hold_time| {
-            let distance = caclulate_distance_for_hold_time(hold_time, race_stats);
-            distance > race_stats.record_distance
-        })
-        .expect("Failed to find the first winning time");
-    let last_winning_time = (1..(race_stats.time - 1))
-        .rev()
-        .find(|hold_time| {
-            let distance = caclulate_distance_for_hold_time(hold_time, race_stats);
-            distance > race_stats.record_distance
-        })
-        .expect("Failed to find the last winning time");
-    last_winning_time - first_winning_time + 1
-}
+// fn find_winning_combinations(race_stats: &RaceStats) -> u64 {
+//     let first_winning_time = (1..(race_stats.time - 1))
+//         .find(|hold_time| {
+//             let distance = caclulate_distance_for_hold_time(hold_time, race_stats);
+//             distance > race_stats.record_distance
+//         })
+//         .expect("Failed to find the first winning time");
+//     let last_winning_time = (1..(race_stats.time - 1))
+//         .rev()
+//         .find(|hold_time| {
+//             let distance = caclulate_distance_for_hold_time(hold_time, race_stats);
+//             distance > race_stats.record_distance
+//         })
+//         .expect("Failed to find the last winning time");
+//     last_winning_time - first_winning_time + 1
+// }
 
 fn find_winning_combinations_quadratic(race_stats: &RaceStats) -> u64 {
     let a = -1f64;
@@ -167,7 +167,10 @@ fn find_winning_combinations_quadratic(race_stats: &RaceStats) -> u64 {
 }
 
 fn perform_processing_1(state: LoadedState1) -> Result<ProcessedState1, AError> {
-    let numbers_of_winning_possibilities = state.iter().map(find_winning_combinations_quadratic).collect();
+    let numbers_of_winning_possibilities = state
+        .iter()
+        .map(find_winning_combinations_quadratic)
+        .collect();
     Ok(numbers_of_winning_possibilities)
 }
 

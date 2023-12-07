@@ -194,6 +194,19 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
     Ok(state)
 }
 
+fn categorize_hand(hand: &Hand, cards_grouped_lengths_most_to_least: &[usize]) -> HandType {
+    match cards_grouped_lengths_most_to_least {
+        [5] => HandType::FiveOfAKind,
+        [4, 1] => HandType::FourOfAKind,
+        [3, 2] => HandType::FullHouse,
+        [3, 1, 1] => HandType::ThreeOfAKind,
+        [2, 2, 1] => HandType::TwoPair,
+        [2, 1, 1, 1] => HandType::OnePair,
+        [1, 1, 1, 1, 1] => HandType::HighCard,
+        _ => panic!("Failed to categorize hand {:?}", hand),
+    }
+}
+
 fn categorize_hand_1(hand: &Hand) -> HandType {
     let cards_grouped: HashMap<char, Vec<Card>> =
         hand.cards.iter().fold(HashMap::new(), |mut acc, card| {
@@ -206,17 +219,8 @@ fn categorize_hand_1(hand: &Hand) -> HandType {
         .map(|cards| cards.len())
         .collect::<Vec<_>>();
     cards_lengths.sort();
-    let cards_lengths = cards_lengths.as_slice();
-    match cards_lengths {
-        [5] => HandType::FiveOfAKind,
-        [1, 4] => HandType::FourOfAKind,
-        [2, 3] => HandType::FullHouse,
-        [1, 1, 3] => HandType::ThreeOfAKind,
-        [1, 2, 2] => HandType::TwoPair,
-        [1, 1, 1, 2] => HandType::OnePair,
-        [1, 1, 1, 1, 1] => HandType::HighCard,
-        _ => panic!("Failed to categorize hand {:?}", hand),
-    }
+    cards_lengths.reverse();
+    categorize_hand(hand, &cards_lengths)
 }
 
 fn finalise_state_1(mut state: InitialState) -> Result<LoadedState, AError> {
@@ -289,17 +293,7 @@ fn categorize_hand_2(hand: &Hand) -> HandType {
     //Always add jokers to the first one
     cards_grouped.get_mut(0).unwrap().append(&mut card_jokers);
     let cards_lengths: Vec<usize> = cards_grouped.iter().map(|cards| cards.len()).collect();
-    let cards_lengths = cards_lengths.as_slice();
-    match cards_lengths {
-        [5] => HandType::FiveOfAKind,
-        [4, 1] => HandType::FourOfAKind,
-        [3, 2] => HandType::FullHouse,
-        [3, 1, 1] => HandType::ThreeOfAKind,
-        [2, 2, 1] => HandType::TwoPair,
-        [2, 1, 1, 1] => HandType::OnePair,
-        [1, 1, 1, 1, 1] => HandType::HighCard,
-        _ => panic!("Failed to categorize hand {:?}", hand),
-    }
+    categorize_hand(hand, &cards_lengths)
 }
 
 fn finalise_state_2(state: InitialState) -> Result<LoadedState, AError> {
@@ -316,9 +310,8 @@ fn compare_cards(cards1: &[Card], cards2: &[Card]) -> Ordering {
         .zip(cards2.iter())
         .fold_while(Ordering::Equal, |_latest, (card1, card2)| {
             match card1.strength.cmp(&card2.strength) {
-                Ordering::Greater => Done(Ordering::Greater),
-                Ordering::Less => Done(Ordering::Less),
                 Ordering::Equal => Continue(Ordering::Equal),
+                ordering => Done(ordering),
             }
         })
         .into_inner()
@@ -327,8 +320,7 @@ fn compare_cards(cards1: &[Card], cards2: &[Card]) -> Ordering {
 fn perform_processing(mut state: LoadedState) -> Result<ProcessedState, AError> {
     state.sort_by(|h1, h2| match h1.hand_type.cmp(&h2.hand_type) {
         Ordering::Equal => compare_cards(&h1.cards, &h2.cards),
-        Ordering::Greater => Ordering::Less,
-        Ordering::Less => Ordering::Greater,
+        ordering => ordering.reverse(),
     });
     //state.iter().for_each(|hand| println!("{hand}"));
     Ok(state)

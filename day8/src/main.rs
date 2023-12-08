@@ -224,12 +224,9 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     let mut iter = repetitions.iter();
     let a = iter.next().unwrap();
     let b = iter.next().unwrap();
-    let mut current_lcm = a.lcm(b);
-    for value in iter {
-        current_lcm = current_lcm.lcm(value);
-    }
+    let lcm = iter.fold(a.lcm(b), |current_lcm, next| current_lcm.lcm(next));
 
-    Ok(current_lcm)
+    Ok(lcm)
 }
 
 fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {

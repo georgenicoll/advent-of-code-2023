@@ -58,7 +58,7 @@ fn finalise_state(state: InitialState) -> Result<LoadedState, AError> {
     Ok(state)
 }
 
-fn calculate_next_number<F1, F2>(
+fn calculate_seq_number<F1, F2>(
     nums: &Vec<i64>,
     get_num_in_sequence: F1,
     get_adjusted_number: &F2,
@@ -68,22 +68,23 @@ where
     F2: Fn(i64, i64) -> i64,
 {
     // println!("{nums:?}");
-    let (all_zeros, diffs) =
-        nums.windows(2)
-            .fold((true, Vec::default()), |(zeros_so_far, mut diffs), ns| {
-                let n1 = ns[0];
-                let n2 = ns[1];
-                let diff = n2 - n1;
-                diffs.push(diff);
-                (zeros_so_far && diff == 0, diffs)
-            });
+    let (all_zeros, diffs) = nums.windows(2).fold(
+        (true, Vec::default()),
+        |(all_zeros_so_far, mut diffs), ns| {
+            let n1 = ns[0];
+            let n2 = ns[1];
+            let diff = n2 - n1;
+            diffs.push(diff);
+            (all_zeros_so_far && diff == 0, diffs)
+        },
+    );
     let seq_num = get_num_in_sequence(nums);
     if all_zeros {
         seq_num
     } else {
         get_adjusted_number(
             seq_num,
-            calculate_next_number(&diffs, get_num_in_sequence, get_adjusted_number),
+            calculate_seq_number(&diffs, get_num_in_sequence, get_adjusted_number),
         )
     }
 }
@@ -92,7 +93,7 @@ fn perform_processing_1(state: LoadedState) -> Result<ProcessedState, AError> {
     let next_nums = state
         .iter()
         .map(|nums| {
-            calculate_next_number(
+            calculate_seq_number(
                 nums,
                 |nums| *nums.last().unwrap(),
                 &|num_in_seq, adjustment| num_in_seq + adjustment,
@@ -106,7 +107,7 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     let next_nums = state
         .iter()
         .map(|nums| {
-            calculate_next_number(
+            calculate_seq_number(
                 nums,
                 |nums| *nums.first().unwrap(),
                 &|num_in_seq, adjustment| num_in_seq - adjustment,

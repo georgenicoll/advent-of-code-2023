@@ -77,12 +77,12 @@ where
                 diffs.push(diff);
                 (zeros_so_far && diff == 0, diffs)
             });
-    let last = get_num_in_sequence(nums);
+    let seq_num = get_num_in_sequence(nums);
     if all_zeros {
-        last
+        seq_num
     } else {
         get_adjusted_number(
-            last,
+            seq_num,
             calculate_next_number(&diffs, get_num_in_sequence, get_adjusted_number),
         )
     }

@@ -426,15 +426,10 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
             Pipe::Ground => {
                 let (can_get_outside, mut tile_coords) =
                     find_all_connected_ground_tiles(&coord, &pipe_runs);
-                // output_tiles(can_get_outside, &tile_coords);
                 if !can_get_outside {
-                    for tile in tile_coords.iter() {
-                        inside_tiles.insert(*tile);
-                    }
+                    inside_tiles.extend(tile_coords.iter());
                 }
-                for visited in tile_coords.drain() {
-                    visited_tiles.insert(visited);
-                }
+                visited_tiles.extend(tile_coords.drain());
             }
             _ => {
                 visited_tiles.insert(coord);

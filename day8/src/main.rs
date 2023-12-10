@@ -126,7 +126,7 @@ fn parse_node_line(line: String) -> Option<(Node, Path)> {
     let mut chars = line.chars();
     match read_word(&mut chars, &DELIMITERS) {
         Some((name, _)) => {
-            let (left, _) = read_word(&mut chars, &DELIMITERS).expect("Failed to read lefrt node");
+            let (left, _) = read_word(&mut chars, &DELIMITERS).expect("Failed to read left node");
             let (right, _) = read_word(&mut chars, &DELIMITERS).expect("Failed to read right node");
             let node = Node { name: name.clone() };
             Some((

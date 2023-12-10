@@ -68,16 +68,15 @@ where
     F2: Fn(i64, i64) -> i64,
 {
     // println!("{nums:?}");
-    let (all_zeros, diffs) = nums.windows(2).fold(
-        (true, Vec::default()),
-        |(all_zeros_so_far, mut diffs), ns| {
-            let n1 = ns[0];
-            let n2 = ns[1];
-            let diff = n2 - n1;
-            diffs.push(diff);
-            (all_zeros_so_far && diff == 0, diffs)
-        },
-    );
+    let (all_zeros, diffs) =
+        nums.windows(2)
+            .fold((true, Vec::default()), |(all_zeros_so_far, mut diffs), ns| {
+                let n1 = ns[0];
+                let n2 = ns[1];
+                let diff = n2 - n1;
+                diffs.push(diff);
+                (all_zeros_so_far && diff == 0, diffs)
+            });
     let seq_num = get_num_in_sequence(nums);
     if all_zeros {
         seq_num

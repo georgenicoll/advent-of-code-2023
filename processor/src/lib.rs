@@ -88,7 +88,28 @@ where
         })
 }
 
-static ADJACENT_DELTAS: Lazy<Vec<(i8, i8)>> = Lazy::new(|| {
+/// Get coords adjacent to the given centre, including diagonals, excluding any coords that would be outside the side lengths.
+/// This will only return actual coordinates (i.e. if the centre is at an edge coords over the edge will not be returned).
+fn adjacent_coords(
+    centre: &(usize, usize),
+    side_lengths: &(usize, usize),
+    deltas: &[(i8, i8)],
+) -> Vec<(usize, usize)> {
+    deltas
+        .iter()
+        .map(|(delta_x, delta_y)| {
+            (
+                centre.0 as isize + *delta_x as isize,
+                centre.1 as isize + *delta_y as isize,
+            )
+        })
+        .filter(|(x, y)| *x >= 0 && *y >= 0)
+        .map(|(x, y)| (x as usize, y as usize))
+        .filter(|(x, y)| *x < side_lengths.0 && *y < side_lengths.1)
+        .collect()
+}
+
+static ADJACENT_DELTAS_DIAGONAL: Lazy<Vec<(i8, i8)>> = Lazy::new(|| {
     Vec::from([
         (-1, -1),
         (0, -1),
@@ -101,24 +122,21 @@ static ADJACENT_DELTAS: Lazy<Vec<(i8, i8)>> = Lazy::new(|| {
     ])
 });
 
-/// Get coords adjacent to the given centre, including diagonals, excluding any coords that would be outside the side lengths.
-/// This will only return actual coordinates (i.e. if the centre is at an edge coords over the edge will not be returned).
-pub fn adjacent_coords(
+pub fn adjacent_coords_diagonal(
     centre: &(usize, usize),
     side_lengths: &(usize, usize),
 ) -> Vec<(usize, usize)> {
-    ADJACENT_DELTAS
-        .iter()
-        .map(|(delta_x, delta_y)| {
-            (
-                centre.0 as isize + *delta_x as isize,
-                centre.1 as isize + *delta_y as isize,
-            )
-        })
-        .filter(|(x, y)| *x >= 0 && *y >= 0)
-        .map(|(x, y)| (x as usize, y as usize))
-        .filter(|(x, y)| *x < side_lengths.0 && *y < side_lengths.1)
-        .collect()
+    adjacent_coords(centre, side_lengths, &ADJACENT_DELTAS_DIAGONAL)
+}
+
+static ADJACENT_DELTAS_CARTESION: Lazy<Vec<(i8, i8)>> =
+    Lazy::new(|| Vec::from([(0, -1), (-1, 0), (1, 0), (0, 1)]));
+
+pub fn adjacent_coords_cartesian(
+    centre: &(usize, usize),
+    side_lengths: &(usize, usize),
+) -> Vec<(usize, usize)> {
+    adjacent_coords(centre, side_lengths, &ADJACENT_DELTAS_CARTESION)
 }
 
 /// Represents an n * m block of data
@@ -280,6 +298,17 @@ impl<T> CellsBuilder<T> {
             side_lengths: (self.max_width, height),
         })
     }
+
+    pub fn current_cell(&self) -> Option<(usize, usize)> {
+        if self.lines.is_empty() {
+            return None;
+        }
+        let line = self.lines.last().unwrap();
+        if line.is_empty() {
+            return None;
+        }
+        Some((line.len() - 1, self.lines.len() - 1))
+    }
 }
 
 #[cfg(test)]
@@ -315,7 +344,7 @@ mod tests {
             [((0, 2), '-'), ((1, 2), '.'), ((2, 2), '+')],
         ];
         //Act
-        let mut builder: CellsBuilder<char> = CellsBuilder::new();
+        let mut builder: CellsBuilder<char> = CellsBuilder::new_empty();
         for line_vals in expected_values.iter() {
             builder.new_line();
             for ((_, _), value) in line_vals {
@@ -336,7 +365,7 @@ mod tests {
 
     #[test]
     fn edit_cells() {
-        let mut builder: CellsBuilder<char> = CellsBuilder::new();
+        let mut builder: CellsBuilder<char> = CellsBuilder::new_empty();
         builder.new_line();
         builder.add_cell('a').unwrap();
         let mut cells = builder.build_cells('?').unwrap();
@@ -350,7 +379,7 @@ mod tests {
 
     #[test]
     fn iter_works() {
-        let mut builder: CellsBuilder<char> = CellsBuilder::new();
+        let mut builder: CellsBuilder<char> = CellsBuilder::new_empty();
         builder.new_line();
         builder.add_cell('a').unwrap();
         builder.add_cell('b').unwrap();

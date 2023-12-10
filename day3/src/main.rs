@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use processor::{adjacent_coords, process, Cells, CellsBuilder};
+use processor::{adjacent_coords_diagonal, process, Cells, CellsBuilder};
 
 type AError = anyhow::Error;
 type InitialState = CellsBuilder<Cell>;
@@ -152,7 +152,7 @@ fn is_symbol_cell(cell: &PartCell) -> bool {
 
 fn is_adjacent_to_symbol(x: usize, y: usize, state: &LoadedState) -> bool {
     let centre = (x, y);
-    let adjacent_coords = adjacent_coords(&centre, &state.side_lengths);
+    let adjacent_coords = adjacent_coords_diagonal(&centre, &state.side_lengths);
     adjacent_coords.iter().any(|(x, y)| {
         let cell = state.get(*x, *y).unwrap();
         is_symbol_cell(cell)
@@ -204,7 +204,7 @@ fn get_part(x: usize, y: usize, state: &LoadedState) -> Option<PartCell> {
 fn find_adjacent_parts(x: usize, y: usize, state: &LoadedState) -> HashSet<PartCell> {
     let mut parts = HashSet::new();
     let centre = (x, y);
-    let coords = adjacent_coords(&centre, &state.side_lengths);
+    let coords = adjacent_coords_diagonal(&centre, &state.side_lengths);
     coords.iter().for_each(|(x, y)| {
         if let Some(part) = get_part(*x, *y, state) {
             parts.insert(part);

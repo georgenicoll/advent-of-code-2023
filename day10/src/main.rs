@@ -418,23 +418,16 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     let mut visited_tiles: HashSet<(usize, usize)> = HashSet::default();
     let mut inside_tiles: BTreeSet<Coord> = BTreeSet::default();
 
-    for (coord, pipe) in state.pipes.iter() {
+    for (coord, _) in state.pipes.iter() {
         if loop_tiles.contains(&coord) || visited_tiles.contains(&coord) {
             continue;
         }
-        match pipe {
-            Pipe::Ground => {
-                let (can_get_outside, mut tile_coords) =
-                    find_all_connected_ground_tiles(&coord, &pipe_runs);
-                if !can_get_outside {
-                    inside_tiles.extend(tile_coords.iter());
-                }
-                visited_tiles.extend(tile_coords.drain());
-            }
-            _ => {
-                visited_tiles.insert(coord);
-            }
+        let (can_get_outside, mut tile_coords) =
+            find_all_connected_ground_tiles(&coord, &pipe_runs);
+        if !can_get_outside {
+            inside_tiles.extend(tile_coords.iter());
         }
+        visited_tiles.extend(tile_coords.drain());
     }
     Ok(inside_tiles.len())
 }

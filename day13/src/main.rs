@@ -239,7 +239,6 @@ fn perform_processing_2(mut state: LoadedState) -> Result<ProcessedState, AError
 
 fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {
     let values = state.iter().enumerate().map(|(_index, reflection)| {
-        //Take the one with the biggest span, if we have it
         let (col_upper_index, _col_span) = reflection.columns.first().unwrap_or(&(0, 0));
         let (row_upper_index, _row_span) = reflection.rows.first().unwrap_or(&(0, 0));
         row_upper_index * 100 + col_upper_index

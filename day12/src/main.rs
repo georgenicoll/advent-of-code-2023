@@ -144,10 +144,7 @@ struct ArrangementKey {
     groups_to_match: usize,
 }
 
-fn construct_arrangement_key(
-    to_arrange: &[Condition],
-    group_lengths: &[usize],
-) -> ArrangementKey {
+fn construct_arrangement_key(to_arrange: &[Condition], group_lengths: &[usize]) -> ArrangementKey {
     ArrangementKey {
         to_arrange: to_arrange.to_vec(),
         groups_to_match: group_lengths.len(),

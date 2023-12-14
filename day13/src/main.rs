@@ -3,8 +3,7 @@ use std::{
     fmt::Display,
 };
 
-use once_cell::sync::Lazy;
-use processor::{process, read_word, Cells, CellsBuilder};
+use processor::{process, read_word, Cells, CellsBuilder, BLANK_DELIMITERS};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum Cell {
@@ -58,13 +57,11 @@ type InitialState = LoadingState;
 type ProcessedState = Vec<Reflection>;
 type FinalResult = usize;
 
-static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(HashSet::default);
-
 fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AError> {
     if state.patterns.is_empty() {
         state.patterns.push(CellsBuilder::default());
     }
-    match read_word(&mut line.chars(), &DELIMITERS) {
+    match read_word(&mut line.chars(), &BLANK_DELIMITERS) {
         Some((line, _)) => {
             let current_builder = state.patterns.last_mut().unwrap();
             current_builder.new_line();

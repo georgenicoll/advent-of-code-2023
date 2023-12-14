@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     error::Error,
+    fmt::Display,
     fs::File,
     io::{BufRead, BufReader},
     str::{Chars, FromStr},
@@ -11,6 +12,8 @@ use once_cell::sync::Lazy;
 
 type AError = anyhow::Error;
 type Delimiter = char;
+
+pub static BLANK_DELIMITERS: Lazy<HashSet<Delimiter>> = Lazy::new(HashSet::default);
 
 pub fn process<LoadState, State, ProcessedState, FinalResult>(
     file_name: &str,
@@ -140,22 +143,27 @@ pub fn adjacent_coords_cartesian(
 }
 
 /// Represents an n * m block of data
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Cells<T> {
     contents: Vec<T>,
     pub side_lengths: (usize, usize),
 }
 
 impl<T> Cells<T> {
-    fn in_bounds(&self, x: usize, y: usize) -> bool {
+    pub fn in_bounds(&self, x: usize, y: usize) -> bool {
         x < self.side_lengths.0 && y < self.side_lengths.1
+    }
+
+    #[inline]
+    fn calculate_index(&self, x: usize, y: usize) -> usize {
+        y * self.side_lengths.0 + x
     }
 
     pub fn get(&self, x: usize, y: usize) -> Result<&T, AError> {
         if !self.in_bounds(x, y) {
-            return Err(AError::msg("({}, {}) is not in bounds"));
+            return Err(AError::msg(format!("({}, {}) is not in bounds", x, y)));
         }
-        let index = y * self.side_lengths.0 + x;
+        let index = self.calculate_index(x, y);
         let cell = self
             .contents
             .get(index)
@@ -165,9 +173,9 @@ impl<T> Cells<T> {
 
     pub fn get_mut(&mut self, x: usize, y: usize) -> Result<&mut T, AError> {
         if !self.in_bounds(x, y) {
-            return Err(AError::msg("({}, {}) is not in bounds"));
+            return Err(AError::msg(format!("({}, {}) is not in bounds", x, y)));
         }
-        let index = y * self.side_lengths.0 + x;
+        let index = self.calculate_index(x, y);
         let cell = self
             .contents
             .get_mut(index)
@@ -181,6 +189,25 @@ impl<T> Cells<T> {
             y: 0,
             cells: self,
         }
+    }
+
+    pub fn swap(&mut self, x1: usize, y1: usize, x2: usize, y2: usize) -> Result<(), AError> {
+        if !self.in_bounds(x1, y1) {
+            return Err(AError::msg(format!(
+                "First ({}, {}) is not in bounds",
+                x1, y1
+            )));
+        }
+        if !self.in_bounds(x2, y2) {
+            return Err(AError::msg(format!(
+                "Second ({}, {}) is not in bounds",
+                x2, y2
+            )));
+        }
+        let index1 = self.calculate_index(x1, y1);
+        let index2 = self.calculate_index(x2, y2);
+        self.contents.swap(index1, index2);
+        Ok(())
     }
 }
 
@@ -207,6 +234,19 @@ impl<'a, T> Iterator for CellsIter<'a, T> {
         }
         let cell = self.cells.contents.get(index);
         cell.map(|c| (coord, c))
+    }
+}
+
+impl<T: Display> Display for Cells<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for y in 0..self.side_lengths.1 {
+            for x in 0..self.side_lengths.0 {
+                let cell = self.get(x, y).unwrap();
+                write!(f, "{cell}")?
+            }
+            writeln!(f)?
+        }
+        write!(f, "")
     }
 }
 
@@ -389,10 +429,13 @@ mod tests {
 
         let cells = builder.build_cells('?').unwrap();
 
-        let items = cells.iter().fold(Vec::new(), |mut acc, ((x, y), c)| {
-            acc.push(((x, y), c));
-            acc
-        });
+        let items = cells.iter().fold(
+            Vec::new(),
+            |mut acc: Vec<((usize, usize), &char)>, ((x, y), c)| {
+                acc.push(((x, y), c));
+                acc
+            },
+        );
 
         let expected: Vec<((usize, usize), char)> =
             vec![((0, 0), 'a'), ((1, 0), 'b'), ((0, 1), 'c'), ((1, 1), 'd')];

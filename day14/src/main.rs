@@ -99,19 +99,23 @@ fn try_moving_cell(
     }
 }
 
+fn move_cell(grid: &mut Cells<Cell>, x: usize, y: usize, delta_x: isize, delta_y: isize) {
+    let cell = grid.get(x, y).unwrap();
+    //only round rocks move
+    if matches!(cell, Cell::RoundRock) {
+        let mut current_x = x;
+        let mut current_y = y;
+        while try_moving_cell(grid, current_x, current_y, delta_x, delta_y) {
+            current_x = (current_x as isize + delta_x) as usize;
+            current_y = (current_y as isize + delta_y) as usize;
+        }
+    }
+}
+
 fn tilt_grid_from_top_left(grid: &mut Cells<Cell>, delta_x: isize, delta_y: isize) {
     for y in 0..grid.side_lengths.1 {
         for x in 0..grid.side_lengths.0 {
-            let cell = grid.get(x, y).unwrap();
-            //only round rocks move
-            if matches!(cell, Cell::RoundRock) {
-                let mut current_x = x;
-                let mut current_y = y;
-                while try_moving_cell(grid, current_x, current_y, delta_x, delta_y) {
-                    current_x = (current_x as isize + delta_x) as usize;
-                    current_y = (current_y as isize + delta_y) as usize;
-                }
-            }
+            move_cell(grid, x, y, delta_x, delta_y);
         }
     }
 }
@@ -119,16 +123,7 @@ fn tilt_grid_from_top_left(grid: &mut Cells<Cell>, delta_x: isize, delta_y: isiz
 fn tilt_grid_from_bottom_right(grid: &mut Cells<Cell>, delta_x: isize, delta_y: isize) {
     for y in (0..grid.side_lengths.1).rev() {
         for x in (0..grid.side_lengths.0).rev() {
-            let cell = grid.get(x, y).unwrap();
-            //only round rocks move
-            if matches!(cell, Cell::RoundRock) {
-                let mut current_x = x;
-                let mut current_y = y;
-                while try_moving_cell(grid, current_x, current_y, delta_x, delta_y) {
-                    current_x = (current_x as isize + delta_x) as usize;
-                    current_y = (current_y as isize + delta_y) as usize;
-                }
-            }
+            move_cell(grid, x, y, delta_x, delta_y);
         }
     }
 }
@@ -153,13 +148,13 @@ fn perform_processing_1(state: LoadedState) -> Result<ProcessedState, AError> {
 static TARGET_CYCLES: usize = 1000000000;
 static INVESTIGATION_CYCLES: usize = 10000;
 static DISPLAY_LAST: usize = 100;
-static CHECKS: usize = 10;
+static NUM_CHECKS: usize = 10;
 
 fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
-    //N -> W -> S -> E
     let mut grid = state.grid.clone();
     let mut cycle_loads = Vec::with_capacity(INVESTIGATION_CYCLES);
     for cycle in 0..INVESTIGATION_CYCLES {
+        //N -> W -> S -> E
         tilt(&mut grid, Direction::North);
         tilt(&mut grid, Direction::West);
         tilt(&mut grid, Direction::South);
@@ -185,9 +180,9 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
             let candidate_size = repetition_end - candidate_start;
             println!(
                 "Found candidate at index {} with size {}, checking {} repetitions",
-                candidate_start, candidate_size, CHECKS
+                candidate_start, candidate_size, NUM_CHECKS
             );
-            if (0..CHECKS).all(|i| {
+            if (0..NUM_CHECKS).all(|i| {
                 let repetition_load = cycle_loads[repetition_end - candidate_size * i];
                 repetition_load == end_load
             }) {

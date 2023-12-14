@@ -85,14 +85,11 @@ fn try_moving_cell(
 ) -> bool {
     let next_x = x as isize + delta_x;
     let next_y = y as isize + delta_y;
-    if next_x < 0 || next_y < 0 {
+    if !grid.in_bounds(next_x, next_y) {
         return false; //out of bounds
     }
     let next_x = next_x as usize;
     let next_y = next_y as usize;
-    if next_x >= grid.side_lengths.0 || next_y >= grid.side_lengths.1 {
-        return false; //out of bounds
-    }
     let next_cell = grid.get(next_x, next_y).unwrap();
     if matches!(next_cell, Cell::Space) {
         grid.swap(x, y, next_x, next_y).unwrap();

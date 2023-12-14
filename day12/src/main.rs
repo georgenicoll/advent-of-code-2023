@@ -339,7 +339,8 @@ mod tests {
     #[test]
     fn test_real_line_6() {
         let line = parse_condition_line("????##?..??#?? 1,4,5").unwrap();
-        let arrangements = calculate_possible_arrangements(&line);
+        /*let arrangements = */
+        calculate_possible_arrangements(&line);
         //assert_eq!(arrangements, 4);
     }
 

@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::Context;
+use num::ToPrimitive;
 use once_cell::sync::Lazy;
 
 type AError = anyhow::Error;
@@ -23,11 +24,13 @@ pub fn process<LoadState, State, ProcessedState, FinalResult>(
     perform_processing: fn(State) -> Result<ProcessedState, AError>,
     calc_result: fn(ProcessedState) -> Result<FinalResult, AError>,
 ) -> Result<FinalResult, AError> {
-    let file = File::open(file_name)?;
-    let loaded_state = BufReader::new(file)
-        .lines()
-        .map(|l| l.unwrap())
-        .try_fold(initial_state, parse_line)?;
+    let loaded_state = {
+        let file = File::open(file_name)?;
+        BufReader::new(file)
+            .lines()
+            .map(|l| l.unwrap())
+            .try_fold(initial_state, parse_line)?
+    };
     let finalised_state = finalise_state(loaded_state)?;
     let processed_state = perform_processing(finalised_state)?;
     calc_result(processed_state)
@@ -150,8 +153,17 @@ pub struct Cells<T> {
 }
 
 impl<T> Cells<T> {
-    pub fn in_bounds(&self, x: usize, y: usize) -> bool {
-        x < self.side_lengths.0 && y < self.side_lengths.1
+
+    /// Checks whether the input can be represented as coordinates (i.e. can be converted to usize)
+    /// and that the values are within the range of the cells' sides
+    pub fn in_bounds<N>(&self, x: N, y: N) -> bool
+    where
+        N: ToPrimitive,
+    {
+        match (x.to_usize(), y.to_usize()) {
+            (Some(x), Some(y)) => x < self.side_lengths.0 && y < self.side_lengths.1,
+            _ => false
+        }
     }
 
     #[inline]
@@ -354,6 +366,20 @@ impl<T> CellsBuilder<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cell_in_bounds() {
+        let mut builder: CellsBuilder<char> = CellsBuilder::new_empty();
+        builder.new_line();
+        builder.add_cell('.').unwrap();
+        let cells = builder.build_cells('.').unwrap();
+        assert!(cells.in_bounds(0, 0));
+        assert!(!cells.in_bounds(1, 0));
+        assert!(!cells.in_bounds(0, 1));
+        assert!(!cells.in_bounds(-1, 0));
+        assert!(!cells.in_bounds(0, -1));
+        assert!(!cells.in_bounds(-1, -1));
+    }
 
     #[test]
     fn load_file() {

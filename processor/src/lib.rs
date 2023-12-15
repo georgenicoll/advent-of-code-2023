@@ -153,7 +153,6 @@ pub struct Cells<T> {
 }
 
 impl<T> Cells<T> {
-
     /// Checks whether the input can be represented as coordinates (i.e. can be converted to usize)
     /// and that the values are within the range of the cells' sides
     pub fn in_bounds<N>(&self, x: N, y: N) -> bool
@@ -162,7 +161,7 @@ impl<T> Cells<T> {
     {
         match (x.to_usize(), y.to_usize()) {
             (Some(x), Some(y)) => x < self.side_lengths.0 && y < self.side_lengths.1,
-            _ => false
+            _ => false,
         }
     }
 

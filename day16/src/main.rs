@@ -1,6 +1,6 @@
 use std::{
     collections::{HashSet, VecDeque},
-    fmt::Display
+    fmt::Display,
 };
 
 use processor::{process, Cells, CellsBuilder};

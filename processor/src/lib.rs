@@ -222,6 +222,17 @@ impl<T> Cells<T> {
     }
 }
 
+impl <T: Clone> Cells<T> {
+    pub fn with_dimension(width: usize, height: usize, initial_value: T) -> Cells<T> {
+        let mut contents = Vec::with_capacity(width * height);
+        contents.resize_with(width * height, || initial_value.clone());
+        Cells {
+            contents,
+            side_lengths: (width, height),
+        }
+    }
+}
+
 pub struct CellsIter<'a, T> {
     x: usize,
     y: usize,

@@ -192,7 +192,7 @@ fn process_from(
 ) -> usize {
     let mut directions = create_empty_light_directions(tiles);
     let mut current_processing_directions: VecDeque<ProcessingDirection> = VecDeque::default();
-    //Prime - beam enters top left heading to the right
+    //Prime - beam enters start x, y heading in the start direction
     current_processing_directions.push_back(((start_x, start_y), start_direction));
     directions
         .get_mut(start_x, start_y)

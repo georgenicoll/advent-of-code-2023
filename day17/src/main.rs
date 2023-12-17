@@ -34,10 +34,10 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
     Ok(state)
 }
 
-fn output_heat_loss_grid(grid: &Cells<HeatLoss>) {
-    println!("Grid:");
-    println!("{grid}");
-    println!("")
+fn output_heat_loss_grid(_grid: &Cells<HeatLoss>) {
+    // println!("Grid:");
+    // println!("{grid}");
+    // println!("")
 }
 
 fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
@@ -103,8 +103,11 @@ struct CrucibleParameters {
 fn construct_move(x: isize, y: isize, direction: Direction, turn_last_made: usize,
                   heat_loss_grid: &Cells<HeatLoss>, best_so_far: &mut Cells<HashMap<BestSoFarKey, usize>>,
                   previous_move: &Move, crucible_parameters: &CrucibleParameters) -> Option<Move> {
+    // println!("x={}, y={}, direction={:?}, turn_last_made={}", x, y, direction, turn_last_made);
+
     //not in bounds?
     if !heat_loss_grid.in_bounds(x, y) {
+        // println!("Not in bounds");
         return None;
     }
     //Need to move a minium in this direction, can we do it?
@@ -118,7 +121,8 @@ fn construct_move(x: isize, y: isize, direction: Direction, turn_last_made: usiz
          let still_to_go = (crucible_parameters.min_in_straight_line - turn_last_made) as isize;
          let (forced_x, forced_y) = (delta_x * still_to_go, delta_y * still_to_go);
          if !heat_loss_grid.in_bounds(x + forced_x, y + forced_y) {
-             return None;
+            // println!("Forced {}, {} not in bounds", x + forced_x, y + forced_y);
+            return None;
          }
     }
 
@@ -139,6 +143,7 @@ fn construct_move(x: isize, y: isize, direction: Direction, turn_last_made: usiz
     best_costs_so_far.insert(key, cost_to_get_here);
     //but if we are at bottom right, no point in continuing from here
     if x == heat_loss_grid.side_lengths.0 - 1 && y == heat_loss_grid.side_lengths.1 - 1 {
+        // print!("Not best");
         return None;
     }
     //better cost, not at final destination
@@ -159,7 +164,7 @@ fn turn_left(heat_loss_grid: &Cells<HeatLoss>, best_so_far: &mut Cells<HashMap<B
         Direction::Left => (x as isize, y as isize + 1, Direction::Down),
         Direction::Right => (x as isize, y as isize - 1, Direction::Up),
     };
-    construct_move(x, y, direction, 0, heat_loss_grid, best_so_far, this_move, crucible_parameters)
+    construct_move(x, y, direction, 1, heat_loss_grid, best_so_far, this_move, crucible_parameters)
 }
 
 fn turn_right(heat_loss_grid: &Cells<HeatLoss>, best_so_far: &mut Cells<HashMap<BestSoFarKey, usize>>,
@@ -176,13 +181,13 @@ fn turn_right(heat_loss_grid: &Cells<HeatLoss>, best_so_far: &mut Cells<HashMap<
         Direction::Left => (x as isize, y as isize - 1, Direction::Up),
         Direction::Right => (x as isize, y as isize + 1, Direction::Down),
     };
-    construct_move(x, y, direction, 0, heat_loss_grid, best_so_far, this_move, crucible_parameters)
+    construct_move(x, y, direction, 1, heat_loss_grid, best_so_far, this_move, crucible_parameters)
 }
 
 fn go_straight(heat_loss_grid: &Cells<HeatLoss>, best_so_far: &mut Cells<HashMap<BestSoFarKey, usize>>,
                this_move: &Move, crucible_parameters: &CrucibleParameters) -> Option<Move> {
     //Only allowed to go a max number in a straight line before we have to turn
-    if this_move.turn_last_made + 1 >= crucible_parameters.max_in_straight_line {
+    if this_move.turn_last_made + 1 > crucible_parameters.max_in_straight_line {
         return None;
     }
     let (x, y) = (this_move.x, this_move.y);
@@ -215,9 +220,9 @@ fn perform(state: &LoadedState, crucible_parameters: CrucibleParameters) -> usiz
     let mut current_moves: VecDeque<Move> = VecDeque::default();
     //prime
     current_moves.push_back(Move::new(0, 0, Direction::Right, 0, 0));
-    best_so_far.get_mut(0, 0).unwrap().insert(BestSoFarKey::new(Direction::Right, 0), 0);
+    best_so_far.get_mut(0, 0).unwrap().insert(BestSoFarKey::new(Direction::Right, 1), 0);
     current_moves.push_back(Move::new(0, 0, Direction::Down, 0, 0));
-    best_so_far.get_mut(0, 0).unwrap().insert(BestSoFarKey::new(Direction::Down, 0), 0);
+    best_so_far.get_mut(0, 0).unwrap().insert(BestSoFarKey::new(Direction::Down, 1), 0);
     //Run
     while let Some(this_move) = current_moves.pop_front() {
         make_next_moves(&state, &mut best_so_far, &this_move, &mut current_moves, &crucible_parameters);
@@ -241,8 +246,8 @@ fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {
 
 fn main() {
     //let file = "test-input.txt";
-    let file = "test-input2.txt";
-    //let file = "input.txt";
+    //let file = "test-input2.txt";
+    let file = "input.txt";
 
     let result1 = process(
         file,

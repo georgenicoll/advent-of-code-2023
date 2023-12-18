@@ -176,7 +176,7 @@ fn construct_move(
 #[inline]
 fn turn_allowed(this_move: &Move, crucible_parameters: &CrucibleParameters,) -> bool {
     //can't turn unless we've been going straight for our minimum number
-    return this_move.turn_last_made >= crucible_parameters.min_in_straight_line;
+    this_move.turn_last_made >= crucible_parameters.min_in_straight_line
 }
 
 #[inline]
@@ -237,7 +237,7 @@ fn turn_right(
 
 #[inline]
 fn continue_straight_on_allowed(this_move: &Move, crucible_parameters: &CrucibleParameters,) -> bool {
-    this_move.turn_last_made + 1 <= crucible_parameters.max_in_straight_line
+    this_move.turn_last_made < crucible_parameters.max_in_straight_line
 }
 
 #[inline]

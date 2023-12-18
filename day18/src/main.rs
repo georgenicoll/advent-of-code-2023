@@ -260,18 +260,16 @@ fn finalise_state_2(state: InitialState) -> Result<LoadedState2, AError> {
 
 fn perform_processing_2(state: LoadedState2) -> Result<ProcessedState, AError> {
     //Using the shoelace formula: https://en.wikipedia.org/wiki/Shoelace_formula
-    //copied from C++ here: https://www.geeksforgeeks.org/area-of-a-polygon-with-given-n-ordered-vertices/
-    let mut j: usize = state.points.len() - 1;
-    let mut area: isize = 0;
-    for i in 0..state.points.len() {
-        let (x_j, y_j) = state.points[j];
-        let (x_i, y_i) = state.points[i];
-        area += (x_j + x_i) * (y_j - y_i);
-        j = i;
-    }
+    //adapted from C++ here: https://www.geeksforgeeks.org/area-of-a-polygon-with-given-n-ordered-vertices/
+    let initial_j_coord = state.points.last().unwrap().clone();
+    let (_, area) = state.points.iter()
+        .fold((initial_j_coord, 0isize), |((j_x, j_y), area), (i_x, i_y)| (
+            (*i_x, *i_y),
+            area + (j_x + *i_x) * (j_y - *i_y)
+        ));
     let enclosed_area = (area / 2).unsigned_abs();
-    //Plus the trench.  Since we are always in the middle of the square when we move a meter, we can take half of this
-    //plus 1 to account for the unbalanced outside corners
+    //Plus the trench.  Since we measured the area above from the centres of all of the outside trench, we can take half o the number of trench
+    //tiles plus 1 to account for the unbalanced outside corners
     let trench_area = state
         .dig_instructions
         .iter()

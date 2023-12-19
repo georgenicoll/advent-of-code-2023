@@ -102,7 +102,6 @@ struct CrucibleParameters {
     max_in_straight_line: usize,
 }
 
-#[inline]
 fn can_move_required_in_a_straight_line(
     x_y_direction: (isize, isize, Direction),
     turn_last_made: usize,
@@ -126,7 +125,6 @@ fn can_move_required_in_a_straight_line(
     true
 }
 
-#[inline]
 fn construct_move(
     x_y_direction: (isize, isize, Direction),
     turn_last_made: usize,
@@ -178,13 +176,11 @@ fn construct_move(
     Some(Move::new(x, y, direction, cost_to_get_here, turn_last_made))
 }
 
-#[inline]
 fn turn_allowed(this_move: &Move, crucible_parameters: &CrucibleParameters) -> bool {
     //can't turn unless we've been going straight for our minimum number
     this_move.turn_last_made >= crucible_parameters.min_in_straight_line
 }
 
-#[inline]
 fn turn_left(
     heat_loss_grid: &Cells<HeatLoss>,
     best_so_far: &mut Cells<HashMap<BestSoFarKey, usize>>,
@@ -212,7 +208,6 @@ fn turn_left(
     )
 }
 
-#[inline]
 fn turn_right(
     heat_loss_grid: &Cells<HeatLoss>,
     best_so_far: &mut Cells<HashMap<BestSoFarKey, usize>>,
@@ -240,7 +235,6 @@ fn turn_right(
     )
 }
 
-#[inline]
 fn continue_straight_on_allowed(
     this_move: &Move,
     crucible_parameters: &CrucibleParameters,
@@ -248,7 +242,6 @@ fn continue_straight_on_allowed(
     this_move.turn_last_made < crucible_parameters.max_in_straight_line
 }
 
-#[inline]
 fn go_straight(
     heat_loss_grid: &Cells<HeatLoss>,
     best_so_far: &mut Cells<HashMap<BestSoFarKey, usize>>,

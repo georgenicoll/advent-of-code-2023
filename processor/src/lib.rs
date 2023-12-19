@@ -165,7 +165,6 @@ impl<T> Cells<T> {
         }
     }
 
-    #[inline]
     fn calculate_index(&self, x: usize, y: usize) -> usize {
         y * self.side_lengths.0 + x
     }

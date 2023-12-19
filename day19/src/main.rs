@@ -236,7 +236,6 @@ struct ToProcess {
 
 /// Separates out a given MinMax into a part that matches a rule, and a part that doesn't match the rule
 /// Returns a tuple of (Optional matched part, Optional unmatched part)
-#[inline]
 fn match_rule(rule: &Rule, min_max: &MinMax) -> (Option<MinMax>, Option<MinMax>) {
     let (min, max) = min_max;
     match rule.check {
@@ -267,7 +266,6 @@ fn match_rule(rule: &Rule, min_max: &MinMax) -> (Option<MinMax>, Option<MinMax>)
     }
 }
 
-#[inline]
 fn process_matched_part(
     accepted: &mut Vec<PartPossibilities>,
     to_process: &mut VecDeque<ToProcess>,
@@ -297,7 +295,6 @@ fn process_matched_part(
     }
 }
 
-#[inline]
 fn process_unmatched_part(
     original_possibilities: &PartPossibilities,
     rule: &Rule,

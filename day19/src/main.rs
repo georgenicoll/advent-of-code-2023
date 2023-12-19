@@ -11,8 +11,8 @@ type AError = anyhow::Error;
 
 #[derive(Debug)]
 enum Check {
-    LessThan { lt_amount: usize },
-    GreaterThan { gt_amount: usize },
+    LessThan { amount: usize },
+    GreaterThan { amount: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ impl Display for Destination {
         let output = match self {
             Destination::Rejected => "Rejected".to_string(),
             Destination::Accepted => "Accepted".to_string(),
-            Destination::Workflow { name } => format!("Worflow '{name}'"),
+            Destination::Workflow { name } => format!("Workflow '{name}'"),
         };
         write!(f, "{output}")
     }
@@ -74,8 +74,8 @@ static WORKFLOW_DELIMITERS: Lazy<HashSet<char>> =
 
 fn parse_check(delimiter: char, amount: usize) -> Check {
     match delimiter {
-        '>' => Check::GreaterThan { gt_amount: amount },
-        '<' => Check::LessThan { lt_amount: amount },
+        '>' => Check::GreaterThan { amount },
+        '<' => Check::LessThan { amount },
         _ => panic!("Unrecognised check delimiter: {delimiter}"),
     }
 }
@@ -183,14 +183,14 @@ fn perform_processing_1(state: LoadedState) -> Result<ProcessedState, AError> {
                     ))
                 })?;
                 match rule.check {
-                    Check::GreaterThan { gt_amount } => {
-                        if part_value > gt_amount {
+                    Check::GreaterThan { amount } => {
+                        if part_value > amount {
                             destination = Some(rule.destination.clone());
                             break;
                         }
                     }
-                    Check::LessThan { lt_amount } => {
-                        if part_value < lt_amount {
+                    Check::LessThan { amount } => {
+                        if part_value < amount {
                             destination = Some(rule.destination.clone());
                             break;
                         }
@@ -240,28 +240,28 @@ struct ToProcess {
 fn match_rule(rule: &Rule, min_max: &MinMax) -> (Option<MinMax>, Option<MinMax>) {
     let (min, max) = min_max;
     match rule.check {
-        Check::GreaterThan { gt_amount } => {
-            if gt_amount < *min {
+        Check::GreaterThan { amount } => {
+            if amount < *min {
                 //all match
-                (Some((*min, *max)), None)
-            } else if gt_amount >= *max {
+                (Some(*min_max), None)
+            } else if amount >= *max {
                 //none match
-                (None, Some((*min, *max)))
+                (None, Some(*min_max))
             } else {
                 //some match
-                (Some((gt_amount + 1, *max)), Some((*min, gt_amount)))
+                (Some((amount + 1, *max)), Some((*min, amount)))
             }
         }
-        Check::LessThan { lt_amount } => {
-            if lt_amount > *max {
+        Check::LessThan { amount } => {
+            if amount > *max {
                 //all match
-                (Some((*min, *max)), None)
-            } else if lt_amount <= *min {
+                (Some(*min_max), None)
+            } else if amount <= *min {
                 //none match
-                (None, Some((*min, *max)))
+                (None, Some(*min_max))
             } else {
                 //some match
-                (Some((*min, lt_amount - 1)), Some((lt_amount, *max)))
+                (Some((*min, amount - 1)), Some((amount, *max)))
             }
         }
     }

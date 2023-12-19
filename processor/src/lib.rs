@@ -243,7 +243,7 @@ impl<'a, T> Iterator for CellsIter<'a, T> {
     type Item = ((usize, usize), &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let index = self.y * self.cells.side_lengths.0 + self.x;
+        let index = self.cells.calculate_index(self.x, self.y);
         if index >= self.cells.contents.len() {
             return None;
         }

@@ -234,25 +234,58 @@ struct ToProcess {
     workflow: String,
 }
 
-fn process_to_direction(
+/// Separates out a given MinMax into a part that matches a rule, and a part that doesn't match the rule
+/// Returns a tuple of (Optional matched part, Optional unmatched part)
+#[inline]
+fn match_rule(rule: &Rule, min_max: &MinMax) -> (Option<MinMax>, Option<MinMax>) {
+    let (min, max) = min_max;
+    match rule.check {
+        Check::GreaterThan { gt_amount } => {
+            if gt_amount < *min {
+                //all match
+                (Some((*min, *max)), None)
+            } else if gt_amount >= *max {
+                //none match
+                (None, Some((*min, *max)))
+            } else {
+                //some match
+                (Some((gt_amount + 1, *max)), Some((*min, gt_amount)))
+            }
+        }
+        Check::LessThan { lt_amount } => {
+            if lt_amount > *max {
+                //all match
+                (Some((*min, *max)), None)
+            } else if lt_amount <= *min {
+                //none match
+                (None, Some((*min, *max)))
+            } else {
+                //some match
+                (Some((*min, lt_amount - 1)), Some((lt_amount, *max)))
+            }
+        }
+    }
+}
+
+#[inline]
+fn process_matched_part(
     accepted: &mut Vec<PartPossibilities>,
     to_process: &mut VecDeque<ToProcess>,
     original_possibilities: &PartPossibilities,
-    attribute: char,
-    min_max: MinMax,
-    destination: &Destination,
+    rule: &Rule,
+    matched_min_max: MinMax,
 ) {
-    match destination {
+    match &rule.destination {
         Destination::Accepted => {
             let mut new_attributes = original_possibilities.attributes.clone();
-            new_attributes.insert(attribute, min_max);
+            new_attributes.insert(rule.attribute, matched_min_max);
             accepted.push(PartPossibilities {
                 attributes: new_attributes,
             });
         }
         Destination::Workflow { name } => {
             let mut new_attributes = original_possibilities.attributes.clone();
-            new_attributes.insert(attribute, min_max);
+            new_attributes.insert(rule.attribute, matched_min_max);
             to_process.push_back(ToProcess {
                 possibilities: PartPossibilities {
                     attributes: new_attributes,
@@ -264,6 +297,19 @@ fn process_to_direction(
     }
 }
 
+#[inline]
+fn process_unmatched_part(
+    original_possibilities: &PartPossibilities,
+    rule: &Rule,
+    unmatched_min_max: MinMax,
+) -> PartPossibilities {
+    let mut new_attributes = original_possibilities.attributes.clone();
+    new_attributes.insert(rule.attribute, unmatched_min_max);
+    PartPossibilities {
+        attributes: new_attributes,
+    }
+}
+
 fn process_next(
     workflows: &HashMap<String, Workflow>,
     accepted: &mut Vec<PartPossibilities>,
@@ -272,58 +318,21 @@ fn process_next(
 ) {
     // println!("Processing at {}: {:?}", this_one.workflow, this_one.possibilities);
     let workflow = workflows.get(&this_one.workflow).unwrap();
-    let mut part_possibilities = Some(this_one.possibilities);
+    let mut current_part_possibilities = Some(this_one.possibilities);
     for rule in workflow.rules.iter() {
-        if let Some(possibilites) = part_possibilities {
-            let (min, max) = possibilites.attributes.get(&rule.attribute).unwrap();
+        if let Some(possibilities) = current_part_possibilities {
+            let min_max = possibilities.attributes.get(&rule.attribute).unwrap();
 
-            let (matched, unmatched) = match rule.check {
-                Check::GreaterThan { gt_amount } => {
-                    if gt_amount < *min {
-                        //all match
-                        (Some((*min, *max)), None)
-                    } else if gt_amount >= *max {
-                        //none match
-                        (None, Some((*min, *max)))
-                    } else {
-                        //some match
-                        (Some((gt_amount + 1, *max)), Some((*min, gt_amount)))
-                    }
-                }
-                Check::LessThan { lt_amount } => {
-                    if lt_amount > *max {
-                        //all match
-                        (Some((*min, *max)), None)
-                    } else if lt_amount <= *min {
-                        //none match
-                        (None, Some((*min, *max)))
-                    } else {
-                        //some match
-                        (Some((*min, lt_amount - 1)), Some((lt_amount, *max)))
-                    }
-                }
-            };
+            let (matched, unmatched) = match_rule(rule, min_max);
             if let Some(matched) = matched {
-                process_to_direction(
-                    accepted,
-                    to_process,
-                    &possibilites,
-                    rule.attribute,
-                    matched,
-                    &rule.destination,
-                );
+                process_matched_part(accepted, to_process, &possibilities, rule, matched);
             }
-            part_possibilities = unmatched.map(|unmatched| {
-                let mut new_attributes = possibilites.attributes.clone();
-                new_attributes.insert(rule.attribute, unmatched);
-                PartPossibilities {
-                    attributes: new_attributes,
-                }
-            })
+            current_part_possibilities =
+                unmatched.map(|unmatched| process_unmatched_part(&possibilities, rule, unmatched));
         }
     }
     //default?
-    if let Some(possibilities) = part_possibilities {
+    if let Some(possibilities) = current_part_possibilities {
         match &workflow.unmatched_destination {
             Destination::Accepted => accepted.push(possibilities),
             Destination::Workflow { name } => to_process.push_back(ToProcess {

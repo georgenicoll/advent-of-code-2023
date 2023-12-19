@@ -144,7 +144,12 @@ fn construct_move(
         return None;
     }
     //Need to move a minium in this direction, can we do it?
-    if !can_move_required_in_a_straight_line(x_y_direction, turn_last_made, heat_loss_grid, crucible_parameters) {
+    if !can_move_required_in_a_straight_line(
+        x_y_direction,
+        turn_last_made,
+        heat_loss_grid,
+        crucible_parameters,
+    ) {
         // println!("Unable to move all required in direction");
         return None;
     }
@@ -174,7 +179,7 @@ fn construct_move(
 }
 
 #[inline]
-fn turn_allowed(this_move: &Move, crucible_parameters: &CrucibleParameters,) -> bool {
+fn turn_allowed(this_move: &Move, crucible_parameters: &CrucibleParameters) -> bool {
     //can't turn unless we've been going straight for our minimum number
     this_move.turn_last_made >= crucible_parameters.min_in_straight_line
 }
@@ -236,7 +241,10 @@ fn turn_right(
 }
 
 #[inline]
-fn continue_straight_on_allowed(this_move: &Move, crucible_parameters: &CrucibleParameters,) -> bool {
+fn continue_straight_on_allowed(
+    this_move: &Move,
+    crucible_parameters: &CrucibleParameters,
+) -> bool {
     this_move.turn_last_made < crucible_parameters.max_in_straight_line
 }
 
@@ -277,8 +285,7 @@ fn make_next_moves(
     crucible_parameters: &CrucibleParameters,
 ) {
     //we can either turn 90 degrees left, turn 90 degrees right or go ahead (if we haven't been going straight for too long)
-    if let Some(turn_left) =
-        turn_left(heat_loss_grid, best_so_far, this_move, crucible_parameters)
+    if let Some(turn_left) = turn_left(heat_loss_grid, best_so_far, this_move, crucible_parameters)
     {
         current_moves.push_back(turn_left);
     };

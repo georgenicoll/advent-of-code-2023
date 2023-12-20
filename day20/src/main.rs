@@ -1,6 +1,11 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    fmt::Display,
+};
 
 use anyhow::anyhow;
+use itertools::Itertools;
+use num::Integer;
 use once_cell::sync::Lazy;
 use processor::{process, read_word};
 use substring::Substring;
@@ -11,35 +16,78 @@ type AError = anyhow::Error;
 enum Pulse {
     High,
     Low,
+    NotSeen,
 }
 
 #[derive(Debug)]
 enum Module {
     FlipFlop {
         on: bool,
+        inputs: HashMap<String, Pulse>,
         outputs: Vec<String>,
     }, //'%', ignores high, flips on low,
     Conjunction {
-        received: HashMap<String, Pulse>,
+        inputs: HashMap<String, Pulse>,
         outputs: Vec<String>,
     }, //'&', starts low on all
     Broadcast {
+        inputs: HashMap<String, Pulse>,
         outputs: Vec<String>,
     }, //Single one 'broadcaster'
 }
 
-type InitialState = HashMap<String, Module>;
+impl Module {
+    fn inputs_string(inputs: &HashMap<String, Pulse>) -> String {
+        inputs
+            .iter()
+            .map(|(name, pulse)| format!("{}={:?}", name, pulse))
+            .join(",")
+    }
 
-type LoadedState = InitialState;
+    fn outputs_string(outputs: &[String]) -> String {
+        outputs.iter().join(",")
+    }
+}
+
+impl Display for Module {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (prefix, inputs, outputs) = match self {
+            Module::FlipFlop {
+                on,
+                inputs,
+                outputs,
+            } => {
+                let on = if *on { "on" } else { "off" };
+                (format!("FlipFlop {} ", on), inputs, outputs)
+            }
+            Module::Conjunction { inputs, outputs } => {
+                ("Conjunction ".to_string(), inputs, outputs)
+            }
+            Module::Broadcast { inputs, outputs } => ("Broadcast ".to_string(), inputs, outputs),
+        };
+        write!(
+            f,
+            "{prefix} -> ({}) -> ({})",
+            Module::inputs_string(inputs),
+            Module::outputs_string(outputs)
+        )
+    }
+}
+
+type InitialState = (String, BTreeMap<String, Module>);
+
+type LoadedState = (String, BTreeMap<String, Module>);
 type ProcessedState = usize;
 type FinalResult = usize;
 
 static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(|| HashSet::from([' ', '-', '>', ',']));
 
-fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AError> {
+fn parse_line(istate: InitialState, line: String) -> Result<InitialState, AError> {
+    let (output, mut state) = istate;
     let mut chars = line.chars();
     if let Some((module_type_and_name, _)) = read_word(&mut chars, &DELIMITERS) {
         //read in the outputs
+        let inputs: HashMap<String, Pulse> = HashMap::default();
         let mut outputs: Vec<String> = Vec::default();
         while let Some((output_name, _)) = read_word(&mut chars, &DELIMITERS) {
             outputs.push(output_name);
@@ -52,16 +100,17 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
                         "Unexpected module name following 'b': {module_type_and_name}"
                     )));
                 };
-                ("broadcaster", Module::Broadcast { outputs })
+                ("broadcaster", Module::Broadcast { inputs, outputs })
             }
-            "%" => (possible_name, Module::FlipFlop { on: false, outputs }),
-            "&" => (
+            "%" => (
                 possible_name,
-                Module::Conjunction {
-                    received: HashMap::default(),
+                Module::FlipFlop {
+                    on: false,
+                    inputs,
                     outputs,
                 },
             ),
+            "&" => (possible_name, Module::Conjunction { inputs, outputs }),
             _ => {
                 return Err(anyhow!(format!(
                     "indecipherable module type/name: {module_type_and_name}"
@@ -70,21 +119,29 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
         };
         state.insert(name.to_string(), module);
     }
-    Ok(state)
+    Ok((output, state))
 }
 
-fn get_outputs<'a>(module: &'a Module) -> &'a Vec<String> {
+fn get_outputs(module: &Module) -> &Vec<String> {
     match module {
-        Module::Broadcast { outputs } => &outputs,
-        Module::Conjunction {
-            received: _received,
+        Module::Broadcast {
+            inputs: _input,
             outputs,
-        } => &outputs,
-        Module::FlipFlop { on: _on, outputs } => &outputs,
+        } => outputs,
+        Module::Conjunction {
+            inputs: _input,
+            outputs,
+        } => outputs,
+        Module::FlipFlop {
+            on: _on,
+            inputs: _input,
+            outputs,
+        } => outputs,
     }
 }
 
-fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
+fn finalise_state(istate: InitialState) -> Result<LoadedState, AError> {
+    let (output, mut state) = istate;
     //Set up all of the Conjunction states - we need to prime them with the incoming conections (set them all to Pulse::Low)
     let source_destinations: Vec<(String, String)> = state
         .iter_mut()
@@ -97,24 +154,49 @@ fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
         .iter()
         .for_each(|(source, destination)| {
             let module = state.get_mut(destination);
-            if let Some(Module::Conjunction {
-                received,
-                outputs: _outputs,
-            }) = module
-            {
-                received.insert(source.clone(), Pulse::Low);
+            match module {
+                Some(Module::FlipFlop {
+                    on: _on,
+                    inputs,
+                    outputs: _outputs,
+                }) => {
+                    inputs.insert(source.clone(), Pulse::NotSeen);
+                }
+                Some(Module::Broadcast {
+                    inputs,
+                    outputs: _outputs,
+                }) => {
+                    inputs.insert(source.clone(), Pulse::NotSeen);
+                }
+                Some(Module::Conjunction {
+                    inputs,
+                    outputs: _outputs,
+                }) => {
+                    inputs.insert(source.clone(), Pulse::Low);
+                }
+                _ => (),
             }
         });
-    Ok(state)
+    Ok((output, state))
 }
 
-fn push_button<F>(state: &mut HashMap<String, Module>, notify_pulse: &F) -> (usize, usize, bool)
+/// Push the button, sending a low pulse into the broadcast.
+///
+/// Each pulse to a destination will be passed to the observation function along with a value of type T (starting
+/// with the initial_value).  The observation function then returns another (or the same) value of type T which will be
+/// passed to the observation function the next time it's called, similar to a fold.
+///
+fn push_button<T, F>(
+    state: &mut BTreeMap<String, Module>,
+    initial_value: T,
+    observation_function: F,
+) -> (usize, usize, T)
 where
-    F: Fn(&String, &Pulse, &String) -> bool,
+    F: Fn(T, &Pulse, &String) -> T,
 {
     let mut low_pulse_count = 0;
     let mut high_pulse_count = 0;
-    let mut got_wanted_notif = false;
+    let mut observation_value = initial_value;
 
     //Queue of source, pulse_type and destination
     let mut pulse_queue: VecDeque<(String, Pulse, String)> = VecDeque::default();
@@ -132,21 +214,28 @@ where
             Pulse::High => {
                 high_pulse_count += 1;
             }
+            _ => (),
         }
-        got_wanted_notif = got_wanted_notif || notify_pulse(&source, &pulse, &destination);
+        observation_value = observation_function(observation_value, &pulse, &destination);
         if !state.contains_key(&destination) {
             // println!("No destination '{destination}'");
             continue;
         }
         state.entry(destination.clone()).and_modify(|module| {
             match module {
-                Module::Broadcast { outputs } => {
+                Module::Broadcast { inputs, outputs } => {
+                    inputs.insert(source.clone(), pulse);
                     //Same pulse to all outputs
                     outputs.iter().for_each(|output| {
                         pulse_queue.push_back((destination.clone(), pulse, output.clone()))
                     });
                 }
-                Module::FlipFlop { on, outputs } => {
+                Module::FlipFlop {
+                    on,
+                    inputs,
+                    outputs,
+                } => {
+                    inputs.insert(source.clone(), pulse);
                     //Ignore high pulses, flip on low pulse and send high if now on, or low if now off
                     if matches!(pulse, Pulse::Low) {
                         *on = !*on;
@@ -156,29 +245,23 @@ where
                         });
                     }
                 }
-                Module::Conjunction { received, outputs } => {
+                Module::Conjunction { inputs, outputs } => {
                     //Update memory for the input
-                    received.insert(source.clone(), pulse);
+                    inputs.insert(source.clone(), pulse);
                     //If all inputs the same...
-                    let all_same = received
-                            .values()
-                            .fold(received.values().next(), |acc, this| {
-                                if matches!(acc, Some(pulse) if pulse == this) {
-                                    acc
-                                } else {
-                                    None
-                                }
-                            });
+                    let all_same = inputs.values().fold(inputs.values().next(), |acc, this| {
+                        if matches!(acc, Some(pulse) if pulse == this) {
+                            acc
+                        } else {
+                            None
+                        }
+                    });
                     let pulse = match all_same {
                         Some(Pulse::High) => Pulse::Low, //If all were the same and high, send a low
-                        _ => Pulse::High, //otherwise send a high
+                        _ => Pulse::High,                //otherwise send a high
                     };
                     outputs.iter().for_each(|output| {
-                        pulse_queue.push_back((
-                            destination.clone(),
-                            pulse,
-                            output.clone(),
-                        ))
+                        pulse_queue.push_back((destination.clone(), pulse, output.clone()))
                     });
                 }
             }
@@ -186,36 +269,61 @@ where
     }
     // println!("Done ({low_pulse_count}, {high_pulse_count})");
     // println!();
-    (low_pulse_count, high_pulse_count, got_wanted_notif)
+    (low_pulse_count, high_pulse_count, observation_value)
 }
 
 const NUM_ITERATIONS: usize = 1000;
 
-fn perform_processing_1(mut state: LoadedState) -> Result<ProcessedState, AError> {
-    //Button, //Single one called 'button' sends a low to the 'broadcaster'
+fn perform_processing_1(lstate: LoadedState) -> Result<ProcessedState, AError> {
+    let (_, mut state) = lstate;
     let mut low_pulse_count: usize = 0;
     let mut high_pulse_count: usize = 0;
     (0..NUM_ITERATIONS).for_each(|_iteration| {
-        let (num_low, num_high, _) = push_button(&mut state, &|_, _, _| true);
+        let (num_low, num_high, _) = push_button(&mut state, 0usize, |acc, _, _| acc);
         low_pulse_count += num_low;
         high_pulse_count += num_high;
     });
     Ok(low_pulse_count * high_pulse_count)
 }
 
-fn perform_processing_2(mut state: LoadedState) -> Result<ProcessedState, AError> {
-    //Button, //Single one called 'button' sends a low to the 'broadcaster'
+fn perform_processing_2(lstate: LoadedState) -> Result<ProcessedState, AError> {
+    //Very specific to the main input :(...
+    //Watch the 4 inputs to rx and see what their cadences for receiving a Low are.
+    //&dr -> rx
+    //&mp -> dr
+    //&qt -> dr
+    //&qb -> dr
+    //&ng -> dr
+    let (_output, mut state) = lstate;
     let mut num_presses = 0;
+    let mut interesting_nums: HashMap<String, usize> = HashMap::default();
     loop {
         num_presses += 1;
-        let (_num_low, _num_high, got_it) = push_button(&mut state, &|_, pulse, destination| {
-            *pulse == Pulse::Low && *destination == "rx"
-        });
-        if got_it {
+        let (_num_low, _num_high, (_, numbers)) = push_button(
+            &mut state,
+            (num_presses, interesting_nums),
+            |(num, mut acc), pulse, destination| {
+                if *pulse == Pulse::Low
+                    && matches!(destination.as_str(), "mp" | "qt" | "qb" | "ng")
+                    && !acc.contains_key(destination)
+                {
+                    acc.insert(destination.clone(), num);
+                    println!("Found '{}' at {}", destination, num);
+                };
+                (num, acc)
+            },
+        );
+        interesting_nums = numbers;
+        if interesting_nums.len() >= 4 {
             break;
         }
-    };
-    Ok(num_presses)
+    }
+    let mp_num = interesting_nums.get("mp").unwrap();
+    let qt_num = interesting_nums.get("qt").unwrap();
+    let qb_num = interesting_nums.get("qb").unwrap();
+    let ng_num = interesting_nums.get("ng").unwrap();
+    let result = mp_num.lcm(qt_num).lcm(qb_num).lcm(ng_num);
+    Ok(result)
 }
 
 fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {
@@ -223,13 +331,13 @@ fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {
 }
 
 fn main() {
-    //let file = "test-input.txt";
-    //let file = "test-input2.txt";
-    let file = "input.txt";
+    //let (output, file) = ("a", test-input.txt");
+    //let (output, file) = ("outputxx", "test-input2.txt");
+    let (output, file) = ("rx", "input.txt");
 
     let result1 = process(
         file,
-        HashMap::default(),
+        (output.to_string(), BTreeMap::default()),
         parse_line,
         finalise_state,
         perform_processing_1,
@@ -242,7 +350,7 @@ fn main() {
 
     let result2 = process(
         file,
-        HashMap::default(),
+        (output.to_string(), BTreeMap::default()),
         parse_line,
         finalise_state,
         perform_processing_2,

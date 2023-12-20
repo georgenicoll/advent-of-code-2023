@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fmt::Display,
 };
 
@@ -74,9 +74,9 @@ impl Display for Module {
     }
 }
 
-type InitialState = (String, BTreeMap<String, Module>);
+type InitialState = (String, HashMap<String, Module>);
 
-type LoadedState = (String, BTreeMap<String, Module>);
+type LoadedState = (String, HashMap<String, Module>);
 type ProcessedState = usize;
 type FinalResult = usize;
 
@@ -187,7 +187,7 @@ fn finalise_state(istate: InitialState) -> Result<LoadedState, AError> {
 /// passed to the observation function the next time it's called, similar to a fold.
 ///
 fn push_button<T, F>(
-    state: &mut BTreeMap<String, Module>,
+    state: &mut HashMap<String, Module>,
     initial_value: T,
     observation_function: F,
 ) -> (usize, usize, T)
@@ -337,7 +337,7 @@ fn main() {
 
     let result1 = process(
         file,
-        (output.to_string(), BTreeMap::default()),
+        (output.to_string(), HashMap::default()),
         parse_line,
         finalise_state,
         perform_processing_1,
@@ -350,7 +350,7 @@ fn main() {
 
     let result2 = process(
         file,
-        (output.to_string(), BTreeMap::default()),
+        (output.to_string(), HashMap::default()),
         parse_line,
         finalise_state,
         perform_processing_2,

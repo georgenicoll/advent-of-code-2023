@@ -219,6 +219,25 @@ impl<T> Cells<T> {
         self.contents.swap(index1, index2);
         Ok(())
     }
+
+    /// Given a coord (isize, isize) with possibly negative values, return the equivalent
+    /// non-negative coord (usize, usize) that corresponds to it within the cells bounds,
+    /// assuming that the cells are tile an infinite plane
+    pub fn get_position_in_bounds(&self, candidate_x: isize, candidate_y: isize) -> (usize, usize) {
+        let x = candidate_x % self.side_lengths.0 as isize;
+        let x = if x < 0 {
+            self.side_lengths.0 as isize + x
+        } else {
+            x
+        };
+        let y = candidate_y % self.side_lengths.1 as isize;
+        let y = if y < 0 {
+            self.side_lengths.1 as isize + y
+        } else {
+            y
+        };
+        (x as usize, y as usize)
+    }
 }
 
 impl<T: Clone> Cells<T> {
@@ -388,6 +407,20 @@ mod tests {
         assert!(!cells.in_bounds(-1, 0));
         assert!(!cells.in_bounds(0, -1));
         assert!(!cells.in_bounds(-1, -1));
+    }
+
+    #[test]
+    fn position_in_bound() {
+        let cells = Cells::with_dimension(3, 3, 0);
+        assert_eq!(cells.get_position_in_bounds(0, 0), (0, 0));
+        assert_eq!(cells.get_position_in_bounds(2, 2), (2, 2));
+        assert_eq!(cells.get_position_in_bounds(3, 3), (0, 0));
+        assert_eq!(cells.get_position_in_bounds(4, 4), (1, 1));
+        assert_eq!(cells.get_position_in_bounds(6, 6), (0, 0));
+        assert_eq!(cells.get_position_in_bounds(-1, -1), (2, 2));
+        assert_eq!(cells.get_position_in_bounds(-2, -2), (1, 1));
+        assert_eq!(cells.get_position_in_bounds(-3, -3), (0, 0));
+        assert_eq!(cells.get_position_in_bounds(-4, -4), (2, 2));
     }
 
     #[test]

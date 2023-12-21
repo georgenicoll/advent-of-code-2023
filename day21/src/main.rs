@@ -126,22 +126,6 @@ fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {
 
 type Coord2 = (isize, isize);
 
-fn get_position_in_bounds(side_lengths: &Coord, candidate_x: isize, candidate_y: isize) -> Coord {
-    let x = candidate_x % side_lengths.0 as isize;
-    let x = if x < 0 {
-        side_lengths.0 as isize + x
-    } else {
-        x
-    };
-    let y = candidate_y % side_lengths.1 as isize;
-    let y = if y < 0 {
-        side_lengths.1 as isize + y
-    } else {
-        y
-    };
-    (x as usize, y as usize)
-}
-
 fn try_make_step(
     tiles: &Cells<Tile>,
     next_positions: &mut HashSet<Coord2>,
@@ -149,7 +133,7 @@ fn try_make_step(
     candidate_y: isize,
 ) {
     //get the cell within the bounds of the tiles
-    let (x, y) = get_position_in_bounds(&tiles.side_lengths, candidate_x, candidate_y);
+    let (x, y) = tiles.get_position_in_bounds(candidate_x, candidate_y);
     let tile = tiles.get(x, y).unwrap();
     if matches!(tile, Tile::Plot) {
         next_positions.insert((candidate_x, candidate_y));
@@ -338,24 +322,5 @@ fn main() {
     match result2 {
         Ok(res) => println!("Result 2: {:?}", res),
         Err(e) => println!("Error on 2: {}", e),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn position_in_bound() {
-        let side_lengths = (3usize, 3usize);
-        assert_eq!(get_position_in_bounds(&side_lengths, 0, 0), (0, 0));
-        assert_eq!(get_position_in_bounds(&side_lengths, 2, 2), (2, 2));
-        assert_eq!(get_position_in_bounds(&side_lengths, 3, 3), (0, 0));
-        assert_eq!(get_position_in_bounds(&side_lengths, 4, 4), (1, 1));
-        assert_eq!(get_position_in_bounds(&side_lengths, 6, 6), (0, 0));
-        assert_eq!(get_position_in_bounds(&side_lengths, -1, -1), (2, 2));
-        assert_eq!(get_position_in_bounds(&side_lengths, -2, -2), (1, 1));
-        assert_eq!(get_position_in_bounds(&side_lengths, -3, -3), (0, 0));
-        assert_eq!(get_position_in_bounds(&side_lengths, -4, -4), (2, 2));
     }
 }

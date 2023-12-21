@@ -201,16 +201,6 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
     Ok((state.total_to_calculate, first_n))
 }
 
-//Used to investigate the repeat size finding code
-// fn load_values(file_name: &str) -> Vec<isize> {
-//     let file = File::open(file_name).unwrap();
-//     BufReader::new(file)
-//         .lines()
-//         .map(|l| l.unwrap())
-//         .map(|l| l.parse::<isize>().unwrap())
-//         .collect()
-// }
-
 fn get_differences(nums: &[isize]) -> Vec<isize> {
     nums.windows(2)
         .map(|window| {
@@ -345,11 +335,6 @@ fn main() {
         perform_processing_2,
         calc_result_2,
     );
-    // Used to investigate the repeat finding code
-    // let (mut values, num_required) = (load_values("test-input-values.txt"), 5000);
-    // values.truncate(values.len() - 11);
-    // let (values, num_required) = (load_values("input-values.txt"), 26501365);
-    // let result2 = calc_result_2_internal(values, num_required);
     match result2 {
         Ok(res) => println!("Result 2: {:?}", res),
         Err(e) => println!("Error on 2: {}", e),

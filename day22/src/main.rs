@@ -201,19 +201,17 @@ fn calc_result_2(state: ProcessedState) -> Result<FinalResult, AError> {
             }
             brick_ids.insert(id);
 
-            let supported_ids = {
-                let brick = state.get(&id).unwrap();
-                brick.supporting_ids.clone()
-            };
-            //are we removing all of the bricks that support the supported ids?
-            for supported_id in supported_ids.iter() {
-                let supported = state.get(supported_id).unwrap();
-                //if the supported by ids are a subset of bricks, then supported now has no support -
-                //so, remove it as well... add to the list to process
-                if supported.supported_by_ids.is_subset(&brick_ids) {
-                    ids_to_process.push_back(*supported_id);
-                }
-            }
+            state.get(&id).unwrap().supporting_ids
+                .iter()
+                .for_each(|supported_id: &usize| {
+                    //are we removing all of the bricks that support the block we are supporting?
+                    let supported = state.get(supported_id).unwrap();
+                    //if the supported by ids are a subset of bricks (i.e. all are removed), then
+                    //supported now has no support, 'remove' it as well... add to the list to process
+                    if supported.supported_by_ids.is_subset(&brick_ids) {
+                        ids_to_process.push_back(*supported_id);
+                    }
+                });
         }
         //only interested in others so we -1 to remove this id which will be in the set
         total_number += brick_ids.len() - 1;

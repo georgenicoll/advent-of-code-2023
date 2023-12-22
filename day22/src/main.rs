@@ -1,26 +1,11 @@
-use std::{collections::{HashSet, HashMap, VecDeque}, cmp::Ordering, fmt::Display};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, HashSet, VecDeque},
+    fmt::Display,
+};
 
 use once_cell::sync::Lazy;
-use processor::{process, read_next};
-
-#[derive(Debug, Clone, Copy)]
-struct Coord3 {
-    x: usize,
-    y: usize,
-    z: usize,
-}
-
-impl Coord3 {
-    fn new(x: usize, y: usize, z: usize) -> Coord3 {
-        Coord3 { x, y, z}
-    }
-}
-
-impl Display for Coord3 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({},{},{})", self.x, self.y, self.z)
-    }
-}
+use processor::{process, read_next, Coord3};
 
 #[derive(Debug, Clone)]
 struct Brick {
@@ -57,10 +42,11 @@ impl Brick {
     }
 
     fn overlaps_x_y(&self, other: &Brick) -> bool {
-        self.min_x() <= other.max_x() && self.max_x() >= other.min_x() &&
-        self.min_y() <= other.max_y() && self.max_y() >= other.min_y()
+        self.min_x() <= other.max_x()
+            && self.max_x() >= other.min_x()
+            && self.min_y() <= other.max_y()
+            && self.max_y() >= other.min_y()
     }
-
 }
 
 impl Display for Brick {
@@ -74,12 +60,10 @@ type AError = anyhow::Error;
 type InitialState = Vec<Brick>;
 
 type LoadedState = InitialState;
-type ProcessedState = HashMap<usize, Brick>;
+type ProcessedState = BTreeMap<usize, Brick>;
 type FinalResult = usize;
 
-static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(||
-    HashSet::from([',', '~'])
-);
+static DELIMITERS: Lazy<HashSet<char>> = Lazy::new(|| HashSet::from([',', '~']));
 
 fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AError> {
     if !line.is_empty() {
@@ -108,10 +92,10 @@ fn sortby_z_y_x(a: &Brick, b: &Brick) -> Ordering {
         .then(a.min_x().cmp(&b.min_x()))
 }
 
-fn output_bricks(bricks: &Vec<Brick>) {
-    println!("Bricks:");
-    bricks.iter().for_each(|b| println!("{b}"));
-    println!();
+fn output_bricks(_bricks: &[Brick]) {
+    // println!("Bricks:");
+    // bricks.iter().for_each(|b| println!("{b}"));
+    // println!();
 }
 
 fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
@@ -122,36 +106,54 @@ fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
     Ok(state)
 }
 
-fn place_brick(brick: &Brick, stacked: &mut HashMap<usize, Brick>) {
+fn place_brick(brick: &Brick, stacked: &mut BTreeMap<usize, Brick>) {
     //previous bricks will be stacked 'lowest' to highest. See if we overlap any other bricks
     //if we overlap then we have to put our brick above the other brick (brick.max_z + 1)... otherwise
     //we can put the brick at the bottom (z=1)
-    let (max_z, supporting_bricks) = stacked.values()
-        .filter(|other| brick.overlaps_x_y(*other))
-        .fold((0, HashSet::default()), |(max_z_so_far, mut supporting), other| {
-            //Is this at the same level as the current max
-            if max_z_so_far == other.max_z() {
-                supporting.insert(other.id);
-                (max_z_so_far, supporting)
-            } else if max_z_so_far < other.max_z() {
-                supporting.clear();
-                supporting.insert(other.id);
-                (other.max_z(), supporting)
-            } else {
-                (max_z_so_far, supporting)
-            }
-        });
+    let (max_z, supporting_bricks) = stacked
+        .values()
+        .filter(|other| brick.overlaps_x_y(other))
+        .fold(
+            (0, HashSet::default()),
+            |(max_z_so_far, mut supporting), other| {
+                match max_z_so_far.cmp(&other.max_z()) {
+                    Ordering::Equal => {
+                        //at the same level, this and others are supporting -> add to the supporting bricks
+                        supporting.insert(other.id);
+                        (max_z_so_far, supporting)
+                    }
+                    Ordering::Less => {
+                        //new one is higher -> this will be supporting instead of the other ones
+                        supporting.clear();
+                        supporting.insert(other.id);
+                        (other.max_z(), supporting)
+                    }
+                    Ordering::Greater => {
+                        //overlapping but another higher is supporting -> this one can be discounted
+                        (max_z_so_far, supporting)
+                    }
+                }
+            },
+        );
     //update the supporting on the bricks that are supporting this one
     supporting_bricks.iter().for_each(|id| {
-        let other = stacked.get_mut(&id).unwrap();
+        let other = stacked.get_mut(id).unwrap();
         other.supporting_ids.insert(brick.id);
     });
-    //and add the new stacked brick
+    //and add the new stacked brick at its new level
     let z_adjustment = brick.min_z() - max_z - 1;
     let stacked_brick = Brick {
         id: brick.id,
-        corner1: Coord3::new(brick.corner1.x, brick.corner1.y, brick.corner1.z - z_adjustment),
-        corner2: Coord3::new(brick.corner2.x, brick.corner2.y, brick.corner2.z - z_adjustment),
+        corner1: Coord3::new(
+            brick.corner1.x,
+            brick.corner1.y,
+            brick.corner1.z - z_adjustment,
+        ),
+        corner2: Coord3::new(
+            brick.corner2.x,
+            brick.corner2.y,
+            brick.corner2.z - z_adjustment,
+        ),
         supported_by_ids: supporting_bricks,
         supporting_ids: HashSet::default(),
     };
@@ -162,7 +164,7 @@ fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
     //take each brick (assuming that we are dealing with the lowest first)
     //and try to place them as close to the bottom as possible according to the floor (z > 0)
     //and any other bricks
-    let mut stacked: HashMap<usize, Brick> = HashMap::with_capacity(state.len());
+    let mut stacked: BTreeMap<usize, Brick> = BTreeMap::default();
     for brick in state {
         place_brick(&brick, &mut stacked);
     }
@@ -174,7 +176,7 @@ fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {
     'outer: for brick in state.values() {
         //check that each of the bricks supported by this has at least another support
         for id in brick.supporting_ids.iter() {
-            let other = state.get(&id).unwrap();
+            let other = state.get(id).unwrap();
             if other.supported_by_ids.len() <= 1 {
                 //No other supports...
                 continue 'outer;
@@ -206,7 +208,7 @@ fn calc_result_2(state: ProcessedState) -> Result<FinalResult, AError> {
             };
             //remove support from the bricks that this is supporting
             for supported_id in supported_ids.iter() {
-                let supported = bricks.get_mut(&supported_id).unwrap();
+                let supported = bricks.get_mut(supported_id).unwrap();
                 supported.supported_by_ids.remove(&id);
                 //if this now has no support, then remove it as well.. add to the list to process
                 if supported.supported_by_ids.is_empty() {

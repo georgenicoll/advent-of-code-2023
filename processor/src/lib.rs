@@ -145,6 +145,25 @@ pub fn adjacent_coords_cartesian(
     adjacent_coords(centre, side_lengths, &ADJACENT_DELTAS_CARTESION)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Coord3 {
+    pub x: usize,
+    pub y: usize,
+    pub z: usize,
+}
+
+impl Coord3 {
+    pub fn new(x: usize, y: usize, z: usize) -> Coord3 {
+        Coord3 { x, y, z }
+    }
+}
+
+impl Display for Coord3 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({},{},{})", self.x, self.y, self.z)
+    }
+}
+
 /// Represents an n * m block of data
 #[derive(Debug, Clone)]
 pub struct Cells<T> {

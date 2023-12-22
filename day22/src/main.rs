@@ -12,8 +12,8 @@ struct Brick {
     id: usize,
     corner1: Coord3,
     corner2: Coord3,
-    supported_by_ids: HashSet<usize>,
-    supporting_ids: HashSet<usize>,
+    supported_by_ids: HashSet<usize>, //ids of bricks that are supporting this
+    supporting_ids: HashSet<usize>, //ids of bricks that this is supporting
 }
 
 impl Brick {
@@ -135,7 +135,7 @@ fn place_brick(brick: &Brick, stacked: &mut BTreeMap<usize, Brick>) {
                 }
             },
         );
-    //update the supporting on the bricks that are supporting this one
+    //update the supporting_ids on the bricks that are supporting this one
     supporting_bricks.iter().for_each(|id| {
         let other = stacked.get_mut(id).unwrap();
         other.supporting_ids.insert(brick.id);
@@ -191,7 +191,6 @@ fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {
 fn calc_result_2(state: ProcessedState) -> Result<FinalResult, AError> {
     let mut total_number = 0usize;
     for brick in state.values() {
-        let mut bricks = state.clone();
         //disintegrate this, how many will fall
         let mut brick_ids: HashSet<usize> = HashSet::default();
         let mut ids_to_process: VecDeque<usize> = VecDeque::default();
@@ -203,15 +202,15 @@ fn calc_result_2(state: ProcessedState) -> Result<FinalResult, AError> {
             brick_ids.insert(id);
 
             let supported_ids = {
-                let brick = bricks.get(&id).unwrap();
+                let brick = state.get(&id).unwrap();
                 brick.supporting_ids.clone()
             };
-            //remove support from the bricks that this is supporting
+            //are we removing all of the bricks that support the supported ids?
             for supported_id in supported_ids.iter() {
-                let supported = bricks.get_mut(supported_id).unwrap();
-                supported.supported_by_ids.remove(&id);
-                //if this now has no support, then remove it as well.. add to the list to process
-                if supported.supported_by_ids.is_empty() {
+                let supported = state.get(supported_id).unwrap();
+                //if the supported by ids are a subset of bricks, then supported now has no support -
+                //so, remove it as well... add to the list to process
+                if supported.supported_by_ids.is_subset(&brick_ids) {
                     ids_to_process.push_back(*supported_id);
                 }
             }

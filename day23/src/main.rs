@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt::Display,
-    mem::swap,
+    mem::swap, time,
 };
 
 use anyhow::anyhow;
@@ -113,34 +113,22 @@ struct Walk {
     current_position: Coord,
 }
 
-fn calculate_next_steps(
+fn calculate_next_steps<F>(
     cells: &Cells<Tile>,
+    choose_candidates: &F,
     walk: &Walk,
     ending_point: &Coord,
     next_walks: &mut Vec<Walk>,
     finished_walks: &mut Vec<Walk>,
-) {
+)
+where
+    F: Fn(&Coord, &Tile) -> Vec<Coord>,
+{
     //if this is a slope we have to go in the direction of the slope
     let current_tile = cells
         .get(walk.current_position.0, walk.current_position.1)
         .unwrap();
-    let next_candidates = match current_tile {
-        Tile::Path => adjacent_coords_cartesian(&walk.current_position, &cells.side_lengths),
-        Tile::Slope { direction } => {
-            let next_coord = match direction {
-                Direction::North => (walk.current_position.0, walk.current_position.1 - 1),
-                Direction::East => (walk.current_position.0 + 1, walk.current_position.1),
-                Direction::South => (walk.current_position.0, walk.current_position.1 + 1),
-                Direction::West => (walk.current_position.0 - 1, walk.current_position.1),
-            };
-            if cells.in_bounds(next_coord.0, next_coord.1) {
-                vec![next_coord]
-            } else {
-                vec![]
-            }
-        }
-        _ => vec![],
-    };
+    let next_candidates = choose_candidates(&walk.current_position, current_tile);
     for next_candidate in next_candidates {
         if walk.visited_cells.contains(&next_candidate) {
             continue; //Been there already
@@ -170,7 +158,15 @@ fn calculate_next_steps(
     }
 }
 
-fn do_walks(cells: &Cells<Tile>, starting_point: &Coord, ending_point: &Coord) -> Vec<Walk> {
+fn do_walks<F>(
+    cells: &Cells<Tile>,
+    starting_point: &Coord,
+    ending_point: &Coord,
+    choose_candidates: &F,
+) -> Vec<Walk>
+where
+    F: Fn(&Coord, &Tile) -> Vec<Coord>,
+{
     let mut current_walks: Vec<Walk> = Vec::default();
     let mut next_walks: Vec<Walk> = Vec::default();
     let mut finished_walks: Vec<Walk> = Vec::default();
@@ -185,6 +181,7 @@ fn do_walks(cells: &Cells<Tile>, starting_point: &Coord, ending_point: &Coord) -
         current_walks.iter().for_each(|walk| {
             calculate_next_steps(
                 cells,
+                choose_candidates,
                 walk,
                 ending_point,
                 &mut next_walks,
@@ -200,7 +197,25 @@ fn do_walks(cells: &Cells<Tile>, starting_point: &Coord, ending_point: &Coord) -
 fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
     let starting_point = (1, 0);
     let ending_point = (state.side_lengths.0 - 2, state.side_lengths.1 - 1);
-    let walks = do_walks(&state, &starting_point, &ending_point);
+    let walks = do_walks(&state, &starting_point, &ending_point, &|coord, tile| {
+        match tile {
+            Tile::Path => adjacent_coords_cartesian(coord, &state.side_lengths),
+            Tile::Slope { direction } => {
+                let next_coord = match direction {
+                    Direction::North => (coord.0, coord.1 - 1),
+                    Direction::East => (coord.0 + 1, coord.1),
+                    Direction::South => (coord.0, coord.1 + 1),
+                    Direction::West => (coord.0 - 1, coord.1),
+                };
+                if state.in_bounds(next_coord.0, next_coord.1) {
+                    vec![next_coord]
+                } else {
+                    vec![]
+                }
+            }
+            _ => vec![],
+        }
+    });
     Ok(walks
         .iter()
         .map(|walk| {
@@ -385,7 +400,7 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     while let Some(visit) = to_visit.pop_front() {
         let the_len = to_visit.len();
         if the_len % 10 == 0 && last_reported != the_len {
-            // println!("to_visit: {}", to_visit.len());
+            println!("to_visit: {}", to_visit.len());
             last_reported = the_len;
         }
         go_to_next(
@@ -440,6 +455,7 @@ fn main() {
     //let file = "test-input2.txt";
     let file = "input.txt";
 
+    let started1_at = time::Instant::now();
     let result1 = process(
         file,
         CellsBuilder::new_empty(),
@@ -449,10 +465,11 @@ fn main() {
         calc_result,
     );
     match result1 {
-        Ok(res) => println!("Result 1: {:?}", res),
+        Ok(res) => println!("Result 1: {:?} (took: {}s)", res, started1_at.elapsed().as_secs_f32()),
         Err(e) => println!("Error on 1: {}", e),
     }
 
+    let started2_at = time::Instant::now();
     let result2 = process(
         file,
         CellsBuilder::new_empty(),
@@ -462,7 +479,7 @@ fn main() {
         calc_result,
     );
     match result2 {
-        Ok(res) => println!("Result 2: {:?}", res),
+        Ok(res) => println!("Result 2: {:?} (took: {}s)", res, started2_at.elapsed().as_secs_f32()),
         Err(e) => println!("Error on 2: {}", e),
     }
 }

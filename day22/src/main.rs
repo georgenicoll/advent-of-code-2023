@@ -13,7 +13,7 @@ struct Brick {
     corner1: Coord3,
     corner2: Coord3,
     supported_by_ids: HashSet<usize>, //ids of bricks that are supporting this
-    supporting_ids: HashSet<usize>, //ids of bricks that this is supporting
+    supporting_ids: HashSet<usize>,   //ids of bricks that this is supporting
 }
 
 impl Brick {
@@ -201,7 +201,10 @@ fn calc_result_2(state: ProcessedState) -> Result<FinalResult, AError> {
             }
             brick_ids.insert(id);
 
-            state.get(&id).unwrap().supporting_ids
+            state
+                .get(&id)
+                .unwrap()
+                .supporting_ids
                 .iter()
                 .for_each(|supported_id: &usize| {
                     //are we removing all of the bricks that support the block we are supporting?

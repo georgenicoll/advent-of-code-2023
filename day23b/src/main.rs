@@ -187,55 +187,66 @@ struct Visited {
 fn go_to_next(
     cells: &Cells<Tile>,
     visit: &Visit,
-    visited: &mut HashMap<Visited, usize>, direction: Direction,
+    visited: &mut HashMap<Visited, (usize, HashSet<Coord>)>, direction: Direction,
     to_visit: &mut VecDeque<Visit>
 ) {
-    let next_coord = match direction {
-        Direction::North => (visit.coord.0, visit.coord.1 - 1),
-        Direction::East => (visit.coord.0 + 1, visit.coord.1),
-        Direction::South => (visit.coord.0, visit.coord.1 + 1),
-        Direction::West => (visit.coord.0 - 1, visit.coord.1),
+    let (next_x, next_y) = match direction {
+        Direction::North => (visit.coord.0 as isize, visit.coord.1 as isize - 1),
+        Direction::East => (visit.coord.0 as isize + 1, visit.coord.1 as isize),
+        Direction::South => (visit.coord.0 as isize, visit.coord.1 as isize + 1),
+        Direction::West => (visit.coord.0 as isize - 1, visit.coord.1 as isize),
     };
+    if !cells.in_bounds(next_x, next_y) {
+        return;
+    }
+    let next_coord = (next_x as usize, next_y as usize);
     if visit.visited.contains(&next_coord) {
         return;
     }
-    if !cells.in_bounds(next_coord.0, next_coord.1) {
-        return;
-    }
     let tile = cells.get(next_coord.0, next_coord.1).unwrap();
-    let next_and_new_visited = match tile {
+    let next_and_new_visited_and_current_visited = match tile {
         Tile::Forest => None,
         _ => {
             let new_visited = Visited {
                 coord: next_coord,
                 direction,
             };
-            // //if we got here in the direction with more steps already.  don't bother in this direction again here
-            // let current_visited = visited.get(&new_visited);
-            // if current_visited.is_none() || *current_visited.unwrap() <= visit.steps + 1 {
-                //less steps, try this direction
-                Some((next_coord, new_visited))
-            // } else {
-            //     //Already got here in more steps going in this direction
-            //     None
-            // }
+            //if we got here in the direction with more steps already.  don't bother in this direction again here
+            let current = visited.get(&new_visited);
+            if current.is_some() {
+                if visit.visited.is_subset(&current.unwrap().1) {
+                    //already got here visiting everything we've been to
+                    None
+                } else {
+                    //we visited others
+                    Some((next_coord, new_visited, current))
+                }
+            } else {
+                Some((next_coord, new_visited, current))
+            }
         }
     };
-    if let Some((next, new_visited)) = next_and_new_visited {
+    if let Some((next, new_visited, current)) = next_and_new_visited_and_current_visited {
         //follow this, push to the front
         let mut new_visit_visited = visit.visited.clone();
         new_visit_visited.insert(next);
         to_visit.push_front(Visit {
             coord: next,
             steps: visit.steps + 1,
-            visited: new_visit_visited,
+            visited: new_visit_visited.clone(),
         });
-        //record the steps here - if this is the furthest we got yet
-        let current_visited = visited.get(&new_visited);
-        if current_visited.is_none() || *current_visited.unwrap() < visit.steps + 1 {
-            //more steps, record it
-            visited.insert(new_visited, visit.steps + 1);
-        }
+        //add our visited steps to the current_visited ones
+        let new_visited_coords = current.map_or_else(
+            || new_visit_visited.clone(),
+            |current| current.1.union(&new_visit_visited)
+                .cloned()
+                .collect()
+        );
+        let max_steps = current.map_or_else(
+            || visit.steps + 1,
+            |max_so_far| max_so_far.0.max(visit.steps + 1)
+        );
+        visited.insert(new_visited, (max_steps, new_visited_coords));
     }
 }
 
@@ -243,7 +254,7 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     let starting_point = (1, 0);
     let ending_point = (state.side_lengths.0 - 2, state.side_lengths.1 - 1);
     //need to do a depth first search...  ?dropping any where we got to the point in more from the same direction already
-    let mut visited: HashMap<Visited, usize> = HashMap::default();
+    let mut visited: HashMap<Visited, (usize, HashSet<Coord>)> = HashMap::default();
     let mut to_visit: VecDeque<Visit> = VecDeque::default();
     //Prime
     to_visit.push_front(Visit {
@@ -253,6 +264,9 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     });
     //Pump
     while let Some(visit) = to_visit.pop_front() {
+        if to_visit.len() % 10 == 0 {
+            println!("to_visit: {}", to_visit.len());
+        }
         go_to_next(&state, &visit, &mut visited, Direction::North, &mut to_visit);
         go_to_next(&state, &visit, &mut visited, Direction::East, &mut to_visit);
         go_to_next(&state, &visit, &mut visited, Direction::South, &mut to_visit);
@@ -263,7 +277,7 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
         coord: ending_point,
         direction: Direction::South,
     }).expect("Didn't find end visit");
-    Ok(*steps)
+    Ok(steps.0)
 }
 
 fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {

@@ -40,7 +40,11 @@ fn main() {
         calc_result,
     );
     match result1 {
-        Ok(res) => println!("Result 1: {:?} (took: {}s)", res, started1_at.elapsed().as_secs_f32()),
+        Ok(res) => println!(
+            "Result 1: {:?} (took: {}s)",
+            res,
+            started1_at.elapsed().as_secs_f32()
+        ),
         Err(e) => println!("Error on 1: {}", e),
     }
 
@@ -54,7 +58,11 @@ fn main() {
         calc_result,
     );
     match result2 {
-        Ok(res) => println!("Result 2: {:?} (took: {}s)", res, started2_at.elapsed().as_secs_f32()),
+        Ok(res) => println!(
+            "Result 2: {:?} (took: {}s)",
+            res,
+            started2_at.elapsed().as_secs_f32()
+        ),
         Err(e) => println!("Error on 2: {}", e),
     }
 }

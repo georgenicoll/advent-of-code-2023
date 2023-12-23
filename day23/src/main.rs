@@ -1,11 +1,12 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt::Display,
-    mem::swap, time,
+    mem::swap,
+    time,
 };
 
 use anyhow::anyhow;
-use processor::{adjacent_coords_cartesian, process, Cells, CellsBuilder};
+use processor::{process, Cells, CellsBuilder};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Direction {
@@ -109,6 +110,7 @@ fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
 type Coord = (usize, usize);
 
 struct Walk {
+    steps: usize,
     visited_cells: HashSet<Coord>,
     current_position: Coord,
 }
@@ -120,16 +122,15 @@ fn calculate_next_steps<F>(
     ending_point: &Coord,
     next_walks: &mut Vec<Walk>,
     finished_walks: &mut Vec<Walk>,
-)
-where
-    F: Fn(&Coord, &Tile) -> Vec<Coord>,
+) where
+    F: Fn(&Coord, &Tile) -> Vec<(Coord, usize)>,
 {
     //if this is a slope we have to go in the direction of the slope
     let current_tile = cells
         .get(walk.current_position.0, walk.current_position.1)
         .unwrap();
     let next_candidates = choose_candidates(&walk.current_position, current_tile);
-    for next_candidate in next_candidates {
+    for (next_candidate, steps) in next_candidates {
         if walk.visited_cells.contains(&next_candidate) {
             continue; //Been there already
         };
@@ -138,6 +139,7 @@ where
             let mut new_visited = walk.visited_cells.clone();
             new_visited.insert(next_candidate);
             finished_walks.push(Walk {
+                steps: walk.steps + steps,
                 visited_cells: new_visited,
                 current_position: next_candidate,
             });
@@ -150,6 +152,7 @@ where
                 let mut new_visited = walk.visited_cells.clone();
                 new_visited.insert(next_candidate);
                 next_walks.push(Walk {
+                    steps: walk.steps + steps,
                     visited_cells: new_visited,
                     current_position: next_candidate,
                 })
@@ -165,13 +168,14 @@ fn do_walks<F>(
     choose_candidates: &F,
 ) -> Vec<Walk>
 where
-    F: Fn(&Coord, &Tile) -> Vec<Coord>,
+    F: Fn(&Coord, &Tile) -> Vec<(Coord, usize)>,
 {
     let mut current_walks: Vec<Walk> = Vec::default();
     let mut next_walks: Vec<Walk> = Vec::default();
     let mut finished_walks: Vec<Walk> = Vec::default();
     //Prime
     next_walks.push(Walk {
+        steps: 0,
         visited_cells: HashSet::from([*starting_point]),
         current_position: *starting_point,
     });
@@ -194,38 +198,84 @@ where
     finished_walks
 }
 
+fn adjacent_coords_and_directions(tiles: &Cells<Tile>, coord: &Coord) -> Vec<(Coord, Direction)> {
+    [
+        (
+            get_next_coord(tiles, coord, &Direction::North),
+            Direction::North,
+        ),
+        (
+            get_next_coord(tiles, coord, &Direction::East),
+            Direction::East,
+        ),
+        (
+            get_next_coord(tiles, coord, &Direction::South),
+            Direction::South,
+        ),
+        (
+            get_next_coord(tiles, coord, &Direction::West),
+            Direction::West,
+        ),
+    ]
+    .iter()
+    .filter_map(|(coord, direction)| coord.map(|coord| (coord, *direction)))
+    .collect()
+}
+
+fn walk_to_end_of_corridor<F>(
+    tiles: &Cells<Tile>,
+    coord: &Coord,
+    direction: &Direction,
+    is_corridor_tile: &F,
+) -> Option<(Coord, Direction, usize)>
+where
+    F: Fn(&Tile) -> bool,
+{
+    let mut next_coord = *coord;
+    let mut last_direction = *direction;
+    let mut steps = 1;
+    while is_corridor(tiles, &next_coord, is_corridor_tile) {
+        let next_and_direction = get_next_in_corridor(tiles, &next_coord, &last_direction);
+        next_and_direction?;
+        (next_coord, last_direction) = next_and_direction.unwrap();
+        steps += 1;
+    }
+    Some((next_coord, last_direction, steps))
+}
+
 fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
     let starting_point = (1, 0);
     let ending_point = (state.side_lengths.0 - 2, state.side_lengths.1 - 1);
     let walks = do_walks(&state, &starting_point, &ending_point, &|coord, tile| {
-        match tile {
-            Tile::Path => adjacent_coords_cartesian(coord, &state.side_lengths),
+        let next_coords = match tile {
+            Tile::Path => adjacent_coords_and_directions(&state, coord),
             Tile::Slope { direction } => {
-                let next_coord = match direction {
-                    Direction::North => (coord.0, coord.1 - 1),
-                    Direction::East => (coord.0 + 1, coord.1),
-                    Direction::South => (coord.0, coord.1 + 1),
-                    Direction::West => (coord.0 - 1, coord.1),
+                let next_coord_and_direction = match direction {
+                    Direction::North => ((coord.0, coord.1 - 1), Direction::North),
+                    Direction::East => ((coord.0 + 1, coord.1), Direction::East),
+                    Direction::South => ((coord.0, coord.1 + 1), Direction::South),
+                    Direction::West => ((coord.0 - 1, coord.1), Direction::West),
                 };
+                let (next_coord, _) = next_coord_and_direction;
                 if state.in_bounds(next_coord.0, next_coord.1) {
-                    vec![next_coord]
+                    vec![next_coord_and_direction]
                 } else {
                     vec![]
                 }
             }
             _ => vec![],
-        }
+        };
+        next_coords
+            .iter()
+            .filter_map(|(coord, direction)| {
+                walk_to_end_of_corridor(&state, coord, direction, &|tile| {
+                    matches!(tile, Tile::Path)
+                })
+            })
+            .map(|(coord, _, steps)| (coord, steps))
+            .collect()
     });
-    Ok(walks
-        .iter()
-        .map(|walk| {
-            walk.visited_cells
-                .iter()
-                .filter(|coord| **coord != starting_point)
-                .count()
-        })
-        .max()
-        .unwrap())
+    Ok(walks.iter().map(|walk| walk.steps).max().unwrap())
 }
 
 struct Visit {
@@ -263,8 +313,16 @@ fn is_forest_or_edge(cells: &Cells<Tile>, coord: &Coord, delta_x: isize, delta_y
     matches!(tile, Tile::Forest)
 }
 
-fn is_corridor(cells: &Cells<Tile>, coord: &Coord) -> bool {
+fn is_corridor<F>(cells: &Cells<Tile>, coord: &Coord, is_corridor_tile: &F) -> bool
+where
+    F: Fn(&Tile) -> bool,
+{
     let mut count_walls = 0usize;
+    //Firstly, This needs to be a Path
+    let tile = cells.get(coord.0, coord.1).unwrap();
+    if !is_corridor_tile(tile) {
+        return false;
+    }
     if is_forest_or_edge(cells, coord, 0, -1) {
         //above
         count_walls += 1;
@@ -335,7 +393,7 @@ fn go_to_next(
     }
     let mut latest_direction = direction;
     let mut steps = 1;
-    while is_corridor(cells, &next_coord) {
+    while is_corridor(cells, &next_coord, &|tile| !matches!(tile, Tile::Forest)) {
         //new_visit_visited.insert(next_coord);
         let next_and_direction = get_next_in_corridor(cells, &next_coord, &latest_direction);
         if next_and_direction.is_none() {
@@ -383,6 +441,35 @@ fn go_to_next(
     visited.insert(new_visited, new_max);
 }
 
+/// Original 'breadth first' search.  It needs a *lot* of memory but does get there
+/// eventually, if it's available (~12G needed)
+// fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
+//     let starting_point = (1, 0);
+//     let ending_point = (state.side_lengths.0 - 2, state.side_lengths.1 - 1);
+//     let walks = do_walks(&state, &starting_point, &ending_point, &|coord, tile| {
+//         let next_coords = match tile {
+//             Tile::Path => adjacent_coords_and_directions(&state, coord),
+//             Tile::Slope { direction: _direction } => adjacent_coords_and_directions(&state, coord),
+//             _ => vec![],
+//         };
+//         next_coords.iter()
+//             .filter_map(|(coord, direction)|
+//                 walk_to_end_of_corridor(&state, coord, direction, &|tile|
+//                     !matches!(tile, Tile::Forest)
+//                 )
+//             )
+//             .map(|(coord, _, steps)| (coord, steps))
+//             .collect()
+//     });
+//     Ok(walks
+//         .iter()
+//         .map(|walk| walk.steps)
+//         .max()
+//         .unwrap())
+// }
+
+/// Alternative Depth first search - requires much less memory but similar time require (still super slow -
+/// takes ~10 mins on mini-pc)
 fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     let starting_point = (1, 0);
     let ending_point = (state.side_lengths.0 - 2, state.side_lengths.1 - 1);
@@ -400,7 +487,7 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState, AError> {
     while let Some(visit) = to_visit.pop_front() {
         let the_len = to_visit.len();
         if the_len % 10 == 0 && last_reported != the_len {
-            println!("to_visit: {}", to_visit.len());
+            // println!("to_visit: {}", to_visit.len());
             last_reported = the_len;
         }
         go_to_next(
@@ -465,7 +552,11 @@ fn main() {
         calc_result,
     );
     match result1 {
-        Ok(res) => println!("Result 1: {:?} (took: {}s)", res, started1_at.elapsed().as_secs_f32()),
+        Ok(res) => println!(
+            "Result 1: {:?} (took: {}s)",
+            res,
+            started1_at.elapsed().as_secs_f32()
+        ),
         Err(e) => println!("Error on 1: {}", e),
     }
 
@@ -479,7 +570,11 @@ fn main() {
         calc_result,
     );
     match result2 {
-        Ok(res) => println!("Result 2: {:?} (took: {}s)", res, started2_at.elapsed().as_secs_f32()),
+        Ok(res) => println!(
+            "Result 2: {:?} (took: {}s)",
+            res,
+            started2_at.elapsed().as_secs_f32()
+        ),
         Err(e) => println!("Error on 2: {}", e),
     }
 }

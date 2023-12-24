@@ -185,7 +185,9 @@ fn as_rational(i: isize) -> Rational64 {
     Rational64::from_integer(i.try_into().unwrap())
 }
 
-// See https://math.stackexchange.com/a/3176648
+/// See https://math.stackexchange.com/a/3176648
+///
+/// Returns ((intersection_x, intersection_y), time_of_intersect) if one can be found
 fn get_intersect_pos_time(
     stone_a: &HailStone,
     stone_b: &HailStone,
@@ -219,7 +221,6 @@ fn get_intersect_pos_time(
     let px = pos_ax + t * vel_ax;
     let py = pos_ay + t * vel_ay;
 
-    // Returns the intersection point, as well as the timestamp at which "one" will reach it with the given velocity.
     Some(((px, py), t))
 }
 

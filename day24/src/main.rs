@@ -224,7 +224,7 @@ fn get_intersect_pos_time(
     Some(((px, py), t))
 }
 
-const RANGE: isize = 1000;
+const RANGE: isize = 337; //Smallest that we can still find it
 
 fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
     let stone_0 = state.hailstones[0];
@@ -233,11 +233,11 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
     let stone_3 = state.hailstones[3];
 
     let mut found_pos: Option<(Rational64, Rational64, Rational64)> = None;
-    'outer: for x in -RANGE..RANGE {
+    'outer: for x in -RANGE..RANGE+1 {
         // if x % 1000 == 0 {
         //     println!("{x}");
         // }
-        for y in -RANGE..RANGE {
+        for y in -RANGE..RANGE+1 {
             //find the intersection of the hailstones when modifying the velocities by x, y
             //(i.e. we are looking to calculate where the rock came from if it had velocity (-x, -y) for each stone with stone_0)
             let intersect1 = get_intersect_pos_time(&stone_1, &stone_0, x, y);
@@ -254,7 +254,7 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
             };
 
             //Now get the z velocity
-            for z in -RANGE..RANGE {
+            for z in -RANGE..RANGE+1 {
                 //Check z positions intersect at the time from our x,y calculation
                 let z_intersect1 =
                     as_rational(stone_1.position.z) + time1 * as_rational(stone_1.velocity.z + z);

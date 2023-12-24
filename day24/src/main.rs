@@ -226,7 +226,6 @@ fn get_intersect_pos_time(
 
 const RANGE: isize = 1000;
 
-//Copy
 fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
     let stone_0 = state.hailstones[0];
     let stone_1 = state.hailstones[1];
@@ -240,7 +239,7 @@ fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
         // }
         for y in -RANGE..RANGE {
             //find the intersection of the hailstones when modifying the velocities by x, y
-            //(i.e. we are looking to calculate the where the rock came from if it had velocity (-x, -y))
+            //(i.e. we are looking to calculate where the rock came from if it had velocity (-x, -y) for each stone with stone_0)
             let intersect1 = get_intersect_pos_time(&stone_1, &stone_0, x, y);
             let intersect2 = get_intersect_pos_time(&stone_2, &stone_0, x, y);
             let intersect3 = get_intersect_pos_time(&stone_3, &stone_0, x, y);

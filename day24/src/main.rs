@@ -1,5 +1,6 @@
-use std::{time, fmt::Display, collections::{HashSet, HashMap}};
+use std::{collections::HashSet, fmt::Display, time};
 
+use num_rational::Rational64;
 use once_cell::sync::Lazy;
 use processor::{process, read_next};
 
@@ -61,7 +62,7 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
         let hailstone = HailStone {
             id: state.hailstones.len() + 1,
             position: ICoord3::new(x, y, z),
-            velocity: ICoord3::new(v_x, v_y, v_z)
+            velocity: ICoord3::new(v_x, v_y, v_z),
         };
         state.hailstones.push(hailstone);
     };
@@ -79,7 +80,8 @@ fn output_state(_state: &State) {
     // output_hailstones(&state.hailstones);
 }
 
-fn finalise_state(state: InitialState) -> Result<LoadedState, AError> {
+fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
+    state.hailstones.truncate(5);
     output_state(&state);
     Ok(state)
 }
@@ -104,25 +106,31 @@ fn line_a_b_c(stone: &HailStone) -> (Float, Float, Float) {
         stone.position.x,
         stone.position.x + stone.velocity.x,
         stone.position.y,
-        stone.position.y + stone.velocity.y
+        stone.position.y + stone.velocity.y,
     )
 }
 
 //https://www.topcoder.com/thrive/articles/Geometry%20Concepts%20part%202:%20%20Line%20Intersection%20and%20its%20Applications
-fn paths_intersect_x_y(min: Float, max: Float, a: HailStone, b: HailStone) -> bool {
+fn paths_intersect_x_y(
+    min: Float,
+    max: Float,
+    a: HailStone,
+    b: HailStone,
+) -> Option<(Float, Float)> {
     let (a1, b1, c1) = line_a_b_c(&a);
     let (a2, b2, c2) = line_a_b_c(&b);
 
     let det = a1 * b2 - a2 * b1;
     if det == 0.0 {
-        return false; //parallel
+        return None; //parallel
     }
     let intersection_x = (b2 * c1 - b1 * c2) / det;
     let intersection_y = (a1 * c2 - a2 * c1) / det;
 
     //Is the intersection within the bounds?
-    if intersection_x < min || intersection_x > max || intersection_y < min || intersection_y > max {
-        return false; //out of bounds
+    if intersection_x < min || intersection_x > max || intersection_y < min || intersection_y > max
+    {
+        return None; //out of bounds
     }
 
     //check time is positive for a
@@ -130,7 +138,7 @@ fn paths_intersect_x_y(min: Float, max: Float, a: HailStone, b: HailStone) -> bo
     let v_x = a.velocity.x as Float;
     let time_a = (intersection_x - x_0) / v_x;
     if time_a < 0.0 {
-        return false;
+        return None;
     }
 
     //check time is positive for b
@@ -138,7 +146,11 @@ fn paths_intersect_x_y(min: Float, max: Float, a: HailStone, b: HailStone) -> bo
     let v_x = b.velocity.x as Float;
     let time_b = (intersection_x - x_0) / v_x;
 
-    time_b >= 0.0
+    if time_b >= 0.0 {
+        Some((time_a, time_b))
+    } else {
+        None
+    }
 }
 
 fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
@@ -147,10 +159,14 @@ fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
     let mut collisions = 0usize;
     for i in 0..state.hailstones.len() {
         for j in (i + 1)..state.hailstones.len() {
-            if i == j { //shouldn't be necessary but just in case
+            if i == j {
+                //shouldn't be necessary but just in case
                 continue;
             }
-            if paths_intersect_x_y(min, max, state.hailstones[i], state.hailstones[j]) {
+            if let Some((time_1, time_2)) =
+                paths_intersect_x_y(min, max, state.hailstones[i], state.hailstones[j])
+            {
+                println!("{} {}", time_1, time_2);
                 collisions += 1
             }
         }
@@ -162,111 +178,102 @@ fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {
     Ok(state)
 }
 
-type ProcessedState2 = isize;
-type FinalResult2 = isize;
+type ProcessedState2 = Rational64;
+type FinalResult2 = Rational64;
 
-const EPSILON: f64 = 0.0000000000001;
-
-fn intersect_on_integer_nanos(a1: Float, b1: Float, c1: Float, stone: &HailStone) -> bool {
-    let (a2, b2, c2) = line_a_b_c_from_points(
-        stone.position.x,
-        stone.position.x + stone.velocity.x * 10,
-        0,
-        10
-    );
-
-    let det = &a1 * &b2 - &a2 * &b1;
-    if det == 0.0 {
-        return false; //parallel
-    }
-    let _intersection_x = (b2 * c1 - b1 * c2) / det;
-    let intersection_t = (a1 * c2 - a2 * c1) / det;
-
-    //if intersection_t is not +ve , we need to try again
-    if intersection_t < 0.0 {
-        return false;
-    }
-
-    let floor = intersection_t.floor();
-    let ceil = intersection_t.ceil();
-    (intersection_t - floor) < EPSILON || (ceil - intersection_t) < EPSILON
+#[inline]
+fn as_rational(i: isize) -> Rational64 {
+    Rational64::from_integer(i.try_into().unwrap())
 }
 
-fn project_line(
-    hailstones: &Vec<HailStone>,
+fn get_intersect_pos_time(
     stone_a: &HailStone,
     stone_b: &HailStone,
-    first_nano: usize,
-    second_nano: usize,
-) -> bool {
-    //find the line between the stones at the 2 nanos
-    let (a1, b1, c1) = line_a_b_c_from_points(
-        stone_a.position.x + stone_a.velocity.x * first_nano as isize,
-        stone_b.position.x + stone_b.velocity.x * second_nano as isize,
-        first_nano as isize,
-        second_nano as isize,
-    );
-    //now check to see whether all of the hailstones can match this line
-    hailstones.iter().all(|stone|
-        intersect_on_integer_nanos(a1, b1, c1, stone)
-    )
+    delta_x: isize,
+    delta_y: isize,
+) -> Option<((Rational64, Rational64), Rational64)> {
+    let zero = as_rational(0);
+    let minus1 = as_rational(-1);
+
+    let pos_ax = as_rational(stone_a.position.x);
+    let pos_ay = as_rational(stone_a.position.y);
+    let pos_bx = as_rational(stone_b.position.x);
+    let pos_by = as_rational(stone_b.position.y);
+    let vel_ax = as_rational(stone_a.velocity.x + delta_x);
+    let vel_ay = as_rational(stone_a.velocity.y + delta_y);
+    let vel_bx = as_rational(stone_b.velocity.x + delta_x);
+    let vel_by = as_rational(stone_b.velocity.y + delta_y);
+
+    //Determinant
+    let det = (vel_ax * minus1 * vel_by) - (vel_ay * minus1 * vel_bx);
+
+    if det == zero {
+        return None;
+    }
+
+    let qx = (minus1 * vel_by * (pos_bx - pos_ax)) - (minus1 * vel_bx * (pos_by - pos_ay));
+    let qy = (vel_ax * (pos_by - pos_ay)) - (vel_ay * (pos_bx - pos_ax));
+
+    let t = qx / det;
+    let _s = qy / det;
+
+    let px = pos_ax + t * vel_ax;
+    let py = pos_ay + t * vel_ay;
+
+    // Returns the intersection point, as well as the timestamp at which "one" will reach it with the given velocity.
+    Some(((px, py), t))
 }
 
-fn calculate_line_start(a: &HailStone, b: &HailStone, first_nano: usize, second_nano: usize) -> ICoord3 {
-    let start_pos = ICoord3::new(
-        a.position.x + a.velocity.x * first_nano as isize,
-        a.position.y + a.velocity.y * first_nano as isize,
-        a.position.z + a.velocity.z * first_nano as isize,
-    );
-    let end_pos = ICoord3::new(
-        b.position.x + b.velocity.x * second_nano as isize,
-        b.position.y + b.velocity.y * second_nano as isize,
-        b.position.z + b.velocity.z * second_nano as isize,
-    );
-    let line_velocity = ICoord3::new(
-        (end_pos.x - start_pos.x) / (second_nano - first_nano) as isize,
-        (end_pos.y - start_pos.y) / (second_nano - first_nano) as isize,
-        (end_pos.z - start_pos.z) / (second_nano - first_nano) as isize,
-    );
-    ICoord3::new(
-        start_pos.x - line_velocity.x * first_nano as isize,
-        start_pos.y - line_velocity.y * first_nano as isize,
-        start_pos.z - line_velocity.z * first_nano as isize,
-    )
-}
+const RANGE: isize = 1_000;
 
-const SEARCH_NANOS_START: usize = 1;
-const SEARCH_NANOS_END: usize = 1_000_000;
-
+//Copy
 fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
-    //take the first 2 hailstones, we're going to see if we can draw lines through these to get
-    //a line that matches all points...  Note Just matching x initially
-    let stone_a = state.hailstones[0];
-    let stone_b = state.hailstones[1];
-    let hailstones: Vec<HailStone> = state.hailstones.iter().skip(2).cloned().collect();
+    let stone_0 = state.hailstones[0];
+    let stone_1 = state.hailstones[1];
+    let stone_2 = state.hailstones[2];
+    let stone_3 = state.hailstones[3];
 
-    let mut found_position: Option<ICoord3> = None;
-    'outer: for first_nano in SEARCH_NANOS_START..SEARCH_NANOS_END {
-        if first_nano % 1000 == 0 {
-            println!("first_nano: {}", first_nano);
+    let mut found_pos: Option<(Rational64, Rational64, Rational64)> = None;
+    'outer: for x in -RANGE..RANGE {
+        if x % 1000 == 0 {
+            println!("{x}");
         }
-        for second_nano in first_nano + 1..SEARCH_NANOS_END {
-            if project_line(&hailstones, &stone_a, &stone_b, first_nano, second_nano) {
-                //Done! it's this one calculate where we would need to start
-                found_position = Some(calculate_line_start(&stone_a, &stone_b, first_nano, second_nano));
-                break 'outer;
-            }
-            //try the other way
-            if project_line(&hailstones, &stone_b, &stone_a, first_nano, second_nano) {
-                //Done! it's this one calculate where we would need to start
-                found_position = Some(calculate_line_start(&stone_b, &stone_a, first_nano, second_nano));
-                break 'outer;
+        for y in -RANGE..RANGE {
+            //find the intersection of the hailstones when modifying the velocities by x, y
+            //(i.e. the opposite direction velocity of the rock path)
+            let intersect1 = get_intersect_pos_time(&stone_1, &stone_0, x, y);
+            let intersect2 = get_intersect_pos_time(&stone_2, &stone_0, x, y);
+            let intersect3 = get_intersect_pos_time(&stone_3, &stone_0, x, y);
+
+            let (coord, time1, time2, time3) = match (intersect1, intersect2, intersect3) {
+                (Some((coord1, time1)), Some((coord2, time2)), Some((coord3, time3)))
+                    if coord1 == coord2 && coord1 == coord3 =>
+                {
+                    (coord1, time1, time2, time3)
+                }
+                _ => continue,
+            };
+
+            //Now get the z velocity
+            for z in -RANGE..RANGE {
+                //We know what time we would intersect...  so just check the z pos
+                let z_intersect1 =
+                    as_rational(stone_1.position.z) + time1 * as_rational(stone_1.velocity.z + z);
+                let z_intersect2 =
+                    as_rational(stone_2.position.z) + time2 * as_rational(stone_2.velocity.z + z);
+                let z_intersect3 =
+                    as_rational(stone_3.position.z) + time3 * as_rational(stone_3.velocity.z + z);
+
+                if z_intersect1 == z_intersect2 && z_intersect1 == z_intersect3 {
+                    //Found it
+                    found_pos = Some((coord.0, coord.1, z_intersect1));
+                    break 'outer;
+                }
             }
         }
     }
-    //search the second from nanos
-    let found_position = found_position.expect("Didn't find it");
-    Ok(found_position.x + found_position.y + found_position.z)
+    let (x, y, z) = found_pos.expect("Didn't find it");
+    Ok(x + y + z)
 }
 
 fn calc_result_2(state: ProcessedState2) -> Result<FinalResult2, AError> {

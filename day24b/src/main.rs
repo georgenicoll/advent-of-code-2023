@@ -1,5 +1,6 @@
 use std::{time, fmt::Display, collections::{HashSet, HashMap}};
 
+use num_rational::Rational64;
 use once_cell::sync::Lazy;
 use processor::{process, read_next};
 
@@ -79,7 +80,8 @@ fn output_state(_state: &State) {
     // output_hailstones(&state.hailstones);
 }
 
-fn finalise_state(state: InitialState) -> Result<LoadedState, AError> {
+fn finalise_state(mut state: InitialState) -> Result<LoadedState, AError> {
+    state.hailstones.truncate(5);
     output_state(&state);
     Ok(state)
 }
@@ -109,20 +111,20 @@ fn line_a_b_c(stone: &HailStone) -> (Float, Float, Float) {
 }
 
 //https://www.topcoder.com/thrive/articles/Geometry%20Concepts%20part%202:%20%20Line%20Intersection%20and%20its%20Applications
-fn paths_intersect_x_y(min: Float, max: Float, a: HailStone, b: HailStone) -> bool {
+fn paths_intersect_x_y(min: Float, max: Float, a: HailStone, b: HailStone) -> Option<(Float, Float)> {
     let (a1, b1, c1) = line_a_b_c(&a);
     let (a2, b2, c2) = line_a_b_c(&b);
 
     let det = a1 * b2 - a2 * b1;
     if det == 0.0 {
-        return false; //parallel
+        return None; //parallel
     }
     let intersection_x = (b2 * c1 - b1 * c2) / det;
     let intersection_y = (a1 * c2 - a2 * c1) / det;
 
     //Is the intersection within the bounds?
     if intersection_x < min || intersection_x > max || intersection_y < min || intersection_y > max {
-        return false; //out of bounds
+        return None; //out of bounds
     }
 
     //check time is positive for a
@@ -130,7 +132,7 @@ fn paths_intersect_x_y(min: Float, max: Float, a: HailStone, b: HailStone) -> bo
     let v_x = a.velocity.x as Float;
     let time_a = (intersection_x - x_0) / v_x;
     if time_a < 0.0 {
-        return false;
+        return None;
     }
 
     //check time is positive for b
@@ -138,7 +140,11 @@ fn paths_intersect_x_y(min: Float, max: Float, a: HailStone, b: HailStone) -> bo
     let v_x = b.velocity.x as Float;
     let time_b = (intersection_x - x_0) / v_x;
 
-    time_b >= 0.0
+    if time_b >= 0.0 {
+        Some((time_a, time_b))
+    } else {
+        None
+    }
 }
 
 fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
@@ -150,7 +156,8 @@ fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
             if i == j { //shouldn't be necessary but just in case
                 continue;
             }
-            if paths_intersect_x_y(min, max, state.hailstones[i], state.hailstones[j]) {
+            if let Some((time_1, time_2)) = paths_intersect_x_y(min, max, state.hailstones[i], state.hailstones[j]) {
+                println!("{} {}", time_1, time_2);
                 collisions += 1
             }
         }
@@ -162,8 +169,8 @@ fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {
     Ok(state)
 }
 
-type ProcessedState2 = isize;
-type FinalResult2 = isize;
+type ProcessedState2 = f64;
+type FinalResult2 = f64;
 
 const EPSILON: f64 = 0.0000000000001;
 
@@ -238,35 +245,128 @@ fn calculate_line_start(a: &HailStone, b: &HailStone, first_nano: usize, second_
 const SEARCH_NANOS_START: usize = 1;
 const SEARCH_NANOS_END: usize = 1_000_000;
 
-fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
-    //take the first 2 hailstones, we're going to see if we can draw lines through these to get
-    //a line that matches all points...  Note Just matching x initially
-    let stone_a = state.hailstones[0];
-    let stone_b = state.hailstones[1];
-    let hailstones: Vec<HailStone> = state.hailstones.iter().skip(2).cloned().collect();
+// fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
+//     //take the first 2 hailstones, we're going to see if we can draw lines through these to get
+//     //a line that matches all points...  Note Just matching x initially
+//     let stone_a = state.hailstones[0];
+//     let stone_b = state.hailstones[1];
+//     let hailstones: Vec<HailStone> = state.hailstones.iter().skip(2).cloned().collect();
 
-    let mut found_position: Option<ICoord3> = None;
-    'outer: for first_nano in SEARCH_NANOS_START..SEARCH_NANOS_END {
-        if first_nano % 1000 == 0 {
-            println!("first_nano: {}", first_nano);
+//     let mut found_position: Option<ICoord3> = None;
+//     'outer: for first_nano in SEARCH_NANOS_START..SEARCH_NANOS_END {
+//         if first_nano % 1000 == 0 {
+//             println!("first_nano: {}", first_nano);
+//         }
+//         for second_nano in first_nano + 1..SEARCH_NANOS_END {
+//             if project_line(&hailstones, &stone_a, &stone_b, first_nano, second_nano) {
+//                 //Done! it's this one calculate where we would need to start
+//                 found_position = Some(calculate_line_start(&stone_a, &stone_b, first_nano, second_nano));
+//                 break 'outer;
+//             }
+//             //try the other way
+//             if project_line(&hailstones, &stone_b, &stone_a, first_nano, second_nano) {
+//                 //Done! it's this one calculate where we would need to start
+//                 found_position = Some(calculate_line_start(&stone_b, &stone_a, first_nano, second_nano));
+//                 break 'outer;
+//             }
+//         }
+//     }
+//     //search the second from nanos
+//     let found_position = found_position.expect("Didn't find it");
+//     Ok(found_position.x + found_position.y + found_position.z)
+// }
+
+fn get_intersect_pos_time(stone_a: &HailStone, stone_b: &HailStone, delta_x: isize, delta_y: isize) -> Option<((Rational64, Rational64), Rational64)> {
+    let (a1, b1, c1) = line_a_b_c_from_points(
+        stone_a.position.x,
+        stone_a.position.x +(stone_a.velocity.x + delta_x),
+        stone_a.position.y,
+        stone_a.position.y +(stone_a.velocity.y + delta_y),
+    );
+    let (a2, b2, c2) = line_a_b_c_from_points(
+        stone_b.position.x,
+        stone_b.position.x +(stone_b.velocity.x + delta_x),
+        stone_b.position.y,
+        stone_b.position.y +(stone_b.velocity.y + delta_y),
+    );
+
+    let det = a1 * b2 - a2 * b1;
+    if det == 0.0 {
+        return None; //parallel
+    }
+    let intersection_x = (b2 * c1 - b1 * c2) / det;
+    let intersection_y = (a1 * c2 - a2 * c1) / det;
+
+    //check time is positive for a
+    let x_0 = stone_a.position.x as Float;
+    let v_x = (stone_a.velocity.x + delta_x) as Float;
+    let time_a = (intersection_x - x_0) / v_x;
+    if time_a < 0.0 {
+        return None; //intersection is negative
+    }
+
+    //check time is positive for b
+    let x_0 = stone_b.position.x as Float;
+    let v_x = (stone_b.velocity.x + delta_x) as Float;
+    let time_b = (intersection_x - x_0) / v_x;
+
+    if time_b >= 0.0 {
+        Some(((intersection_x, intersection_y), time_a))
+    } else {
+        None
+    }
+
+}
+
+const RANGE:isize = 100_000;
+
+//Copy
+fn perform_processing_2(state: LoadedState) -> Result<ProcessedState2, AError> {
+    let stone_0 = state.hailstones[0];
+    let stone_1 = state.hailstones[1];
+    let stone_2 = state.hailstones[2];
+    let stone_3 = state.hailstones[3];
+
+    let mut found_pos: Option<(f64, f64, f64)> = None;
+    'outer: for x in -RANGE..RANGE {
+        if x % 1000 == 0 {
+            println!("{x}");
         }
-        for second_nano in first_nano + 1..SEARCH_NANOS_END {
-            if project_line(&hailstones, &stone_a, &stone_b, first_nano, second_nano) {
-                //Done! it's this one calculate where we would need to start
-                found_position = Some(calculate_line_start(&stone_a, &stone_b, first_nano, second_nano));
-                break 'outer;
-            }
-            //try the other way
-            if project_line(&hailstones, &stone_b, &stone_a, first_nano, second_nano) {
-                //Done! it's this one calculate where we would need to start
-                found_position = Some(calculate_line_start(&stone_b, &stone_a, first_nano, second_nano));
-                break 'outer;
+        for y in -RANGE..RANGE {
+            //find the intersection of the hailstones when modifying the velocities by x, y
+            //(i.e. the opposite direction velocity of the rock path)
+            let intersect1 = get_intersect_pos_time(&stone_1, &stone_0, x, y);
+            let intersect2 = get_intersect_pos_time(&stone_2, &stone_0, x, y);
+            let intersect3 = get_intersect_pos_time(&stone_3, &stone_0, x, y);
+
+            let (coord, time1, time2, time3) = match (intersect1, intersect2, intersect3) {
+                (
+                    Some((coord1, time1)),
+                    Some((coord2, time2)),
+                    Some((coord3, time3)),
+                )
+                if coord1 == coord2 && coord1 == coord3 => (coord1, time1, time2, time3),
+                _ => continue,
+            };
+
+            //Now get the z velocity
+            for z in -RANGE..RANGE {
+                //We know what time we would intersect...  so just check the z pos
+                let z_intersect1 = stone_1.position.z as f64 + time1 * (stone_1.velocity.z + z) as f64;
+                let z_intersect2 = stone_2.position.z as f64 + time2 * (stone_2.velocity.z + z) as f64;
+                let z_intersect3 = stone_3.position.z as f64 + time3 * (stone_3.velocity.z + z) as f64;
+
+                if z_intersect1 == z_intersect2 && z_intersect1 == z_intersect3 {
+                    //Found it
+                    found_pos = Some((coord.0, coord.1, z_intersect1));
+                    break 'outer;
+                }
+
             }
         }
     }
-    //search the second from nanos
-    let found_position = found_position.expect("Didn't find it");
-    Ok(found_position.x + found_position.y + found_position.z)
+    let (x, y, z) = found_pos.expect("Didn't find it");
+    Ok(x + y + z)
 }
 
 fn calc_result_2(state: ProcessedState2) -> Result<FinalResult2, AError> {

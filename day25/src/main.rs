@@ -13,23 +13,9 @@ type AError = anyhow::Error;
 
 type Id = usize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct Component {
-    id: Id,
     connections: HashSet<Id>,
-    connection_weights: HashMap<Id, usize>,
-    //combined_nodes: HashSet<String>,
-}
-
-impl Component {
-    fn new(id: Id) -> Component {
-        Component {
-            id,
-            connections: HashSet::default(),
-            connection_weights: HashMap::default(),
-            //combined_nodes: HashSet::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -89,7 +75,7 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
         state
             .components
             .entry(id)
-            .or_insert_with(|| Component::new(id));
+            .or_default();
         while let Some((other, _)) = read_word(&mut chars, &DELIMITERS) {
             let other = &other;
             //connect to this component
@@ -101,7 +87,7 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
             state
                 .components
                 .entry(other_id)
-                .or_insert_with(|| Component::new(other_id))
+                .or_default()
                 .connections
                 .insert(id);
             //and set up the connections we only keep one way
@@ -118,13 +104,6 @@ fn finalise_state(state: InitialState) -> Result<LoadedState, AError> {
     Ok(state)
 }
 
-#[derive(Debug, Clone)]
-struct CutOfThePhase {
-    s: Id,
-    t: Id,
-    cut_weight: usize,
-}
-
 struct Subset {
     parent: usize,
     rank: usize,
@@ -132,10 +111,7 @@ struct Subset {
 
 impl Subset {
     fn new(parent: usize, rank: usize) -> Subset {
-        Subset {
-            parent,
-            rank,
-        }
+        Subset { parent, rank }
     }
 }
 
@@ -150,13 +126,13 @@ fn union(subsets: &mut Vec<Subset>, x: Id, y: Id) {
     let x_root = find(subsets, x);
     let y_root = find(subsets, y);
 
-    if subsets[x_root].rank < subsets[y_root].rank {
-        subsets[x_root].parent = y_root;
-    } else if subsets[x_root].rank > subsets[y_root].rank {
-        subsets[y_root].parent = x_root;
-    } else {
-        subsets[y_root].parent = x_root;
-        subsets[x_root].rank += 1;
+    match subsets[x_root].rank.cmp(&subsets[y_root].rank) {
+        Ordering::Less => subsets[x_root].parent = y_root,
+        Ordering::Greater => subsets[y_root].parent = x_root,
+        Ordering::Equal => {
+            subsets[y_root].parent = x_root;
+            subsets[x_root].rank += 1;
+        },
     }
 }
 
@@ -164,13 +140,9 @@ fn union(subsets: &mut Vec<Subset>, x: Id, y: Id) {
 fn kargers_min_cut(state: &State) -> HashSet<Connection> {
     let mut rng = rand::thread_rng();
 
-    let mut components = state.components.clone();
-
-    let mut subsets: Vec<Subset> = (0..components.len())
-        .map(|i| Subset::new(i, 0))
-        .collect();
+    let mut subsets: Vec<Subset> = (0..state.components.len()).map(|i| Subset::new(i, 0)).collect();
     let connections = state.connections.iter().collect::<Vec<_>>();
-    let mut vertices = components.len();
+    let mut vertices = state.components.len();
 
     while vertices > 2 {
         let index: usize = rng.gen_range(0..connections.len());
@@ -192,8 +164,7 @@ fn kargers_min_cut(state: &State) -> HashSet<Connection> {
     }
 
     let mut cutedges: HashSet<Connection> = HashSet::default();
-    for i in 0..connections.len() {
-        let connection = connections[i];
+    for connection in connections {
         let subset1 = find(&mut subsets, connection.from);
         let subset2 = find(&mut subsets, connection.to);
         if subset1 != subset2 {
@@ -212,8 +183,8 @@ struct Visit {
 impl Visit {
     fn new(current_group: &Id, to_visit: &Id) -> Visit {
         Visit {
-            current_group: current_group.clone(),
-            to_visit: to_visit.clone(),
+            current_group: *current_group,
+            to_visit: *to_visit,
         }
     }
 }
@@ -225,8 +196,7 @@ fn get_groups(
     components: &HashMap<Id, Component>,
     disconnected_connections: &HashSet<Connection>,
     max_groups: usize,
-)
--> Option<HashMap<Id, HashSet<Id>>> {
+) -> Option<HashMap<Id, HashSet<Id>>> {
     let mut component_ids = components.keys().cloned().collect::<HashSet<_>>();
     let mut result = HashMap::default();
     //Prime
@@ -235,9 +205,10 @@ fn get_groups(
     //Pump
     while let Some(visit) = to_visit.pop_front() {
         let component_id = &visit.to_visit;
-        if component_ids.contains(component_id) { // Not Already visited
+        if component_ids.contains(component_id) {
+            // Not Already visited
             component_ids.remove(component_id); //now we have
-            //add it to the group
+                                                //add it to the group
             let group_id = &visit.current_group;
             if !result.contains_key(group_id) {
                 let component_names = HashSet::default();
@@ -248,10 +219,10 @@ fn get_groups(
             let component = components.get(component_id).unwrap();
             for connection in component.connections.iter() {
                 if component_ids.contains(connection) {
-                    let connection1 = Connection::new(&component_id, &connection);
+                    let connection1 = Connection::new(component_id, connection);
                     if !disconnected_connections.contains(&connection1) {
                         //Not been disconnected - DFS
-                        to_visit.push_front(Visit::new(&group_id, &connection));
+                        to_visit.push_front(Visit::new(group_id, connection));
                     }
                 }
             }
@@ -285,16 +256,12 @@ fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
         cut_edges = kargers_min_cut(&state);
     }
     //Now calculate the partition sizes.
-    let partitions = get_groups(
-        &state.components,
-        &cut_edges,
-        2
-    );
+    let partitions = get_groups(&state.components, &cut_edges, 2);
     let partitions = partitions.expect("No Partitions!");
-    Ok(partitions.iter()
-        .map(|(_, components)| components.len())
-        .product()
-    )
+    Ok(partitions
+        .values()
+        .map(|components| components.len())
+        .product())
 }
 
 fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {

@@ -11,7 +11,7 @@ struct Component {
     name: String,
     connections: HashSet<String>,
     connection_weights: HashMap<String, usize>,
-    combined_nodes: HashSet<String>,
+    // combined_nodes: HashSet<String>,
 }
 
 impl Component {
@@ -20,7 +20,7 @@ impl Component {
             name: name.clone(),
             connections: HashSet::default(),
             connection_weights: HashMap::default(),
-            combined_nodes: HashSet::default(),
+            // combined_nodes: HashSet::default(),
         }
     }
 }
@@ -146,10 +146,10 @@ fn merge_vertices_from_cut(components: &mut HashMap<String, Component>, cut_of_t
     // println!("s: {s:?}");
 
     //Use s as the new component
-    t.combined_nodes.into_iter().for_each(|node| {
-        s.combined_nodes.insert(node);
-    });
-    s.combined_nodes.insert(t.name.clone());
+    // t.combined_nodes.into_iter().for_each(|node| {
+    //     s.combined_nodes.insert(node);
+    // });
+    // s.combined_nodes.insert(t.name.clone());
 
     t.connections.drain().filter(|edge| *edge != s.name).for_each(|edge| {
         // println!("opposite t get: {edge}");
@@ -194,8 +194,9 @@ fn find_min_cut(state: &State) ->(HashSet<String>, CutOfThePhase) {
     let mut current_best_partition: Option<HashSet<String>> = None;
     let mut current_best_cut: Option<CutOfThePhase> = None;
 
+    let started_at = time::Instant::now();
     while components.len() > 1 {
-        println!("components.len: {}", components.len());
+        println!("components.len: {} ({})", components.len(), started_at.elapsed().as_secs_f32());
         let cut_of_the_phase = maximum_adjacency_search(&components);
         let current_best_cut_weight = current_best_cut.iter().map(|cut| cut.cut_weight).next().unwrap_or(usize::MAX);
 

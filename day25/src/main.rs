@@ -1,4 +1,4 @@
-use std::{time, collections::{HashSet, HashMap, BTreeSet, VecDeque, BTreeMap}, cmp::Ordering};
+use std::{time, collections::{HashSet, HashMap}, cmp::Ordering};
 
 use anyhow::anyhow;
 use once_cell::sync::Lazy;
@@ -6,16 +6,21 @@ use processor::{process, read_word};
 
 type AError = anyhow::Error;
 
+#[derive(Debug, Clone)]
 struct Component {
-    _name: String,
-    connections: BTreeSet<String>,
+    name: String,
+    connections: HashSet<String>,
+    connection_weights: HashMap<String, usize>,
+    combined_nodes: HashSet<String>,
 }
 
 impl Component {
     fn new(name: &String) -> Component {
         Component {
-            _name: name.clone(),
-            connections: BTreeSet::default(),
+            name: name.clone(),
+            connections: HashSet::default(),
+            connection_weights: HashMap::default(),
+            combined_nodes: HashSet::default(),
         }
     }
 }
@@ -42,8 +47,8 @@ impl Connection {
 
 #[derive(Default)]
 struct State {
-    components: BTreeMap<String, Component>,
-    connections: BTreeSet<Connection>,
+    components: HashMap<String, Component>,
+    connections: HashSet<Connection>,
 }
 
 type InitialState = State;
@@ -83,173 +88,175 @@ fn finalise_state(state: InitialState) -> Result<LoadedState, AError> {
     Ok(state)
 }
 
-#[derive(Debug)]
-struct Visit {
-    current_group: String,
-    to_visit: String,
+#[derive(Debug, Clone)]
+struct CutOfThePhase {
+    s: String,
+    t: String,
+    cut_weight: usize,
 }
 
-impl Visit {
-    fn new(current_group: &String, to_visit: &String) -> Visit {
-        Visit {
-            current_group: current_group.clone(),
-            to_visit: to_visit.clone(),
-        }
-    }
-}
+fn maximum_adjacency_search(components: &HashMap<String, Component>) -> CutOfThePhase {
+    let start = components.keys().next().unwrap();
+    let mut found_set: Vec<&String> = Vec::from([start]);
+    let mut cut_weights: Vec<usize> = Vec::default();
+    let mut candidates: HashSet<&String> = components.keys().collect();
+    candidates.remove(start);
 
-/// find all of the groups, ignoring any connections in the disconnected_connections set
-///
-/// returns a map of component name to all connected component names
-fn get_groups(
-    components: &BTreeMap<String, Component>,
-    disconnected_connections: &HashSet<Connection>,
-    max_groups: usize,
-)
--> Option<HashMap<String, HashSet<String>>> {
-    let mut component_names = components.keys().cloned().collect::<HashSet<_>>();
-    let mut result = HashMap::default();
-    //Prime
-    let first = component_names.iter().next().unwrap();
-    let mut to_visit: VecDeque<Visit> = VecDeque::from([Visit::new(first, first)]);
-    //Pump
-    while let Some(visit) = to_visit.pop_front() {
-        let component_name = &visit.to_visit;
-        if component_names.contains(component_name) { // Not Already visited
-            component_names.remove(component_name); //now we have
-            //add it to the group
-            let group_name = &visit.current_group;
-            if !result.contains_key(group_name) {
-                let component_names = HashSet::default();
-                result.insert(group_name.clone(), component_names);
-            }
-            result.get_mut(group_name).unwrap().insert(component_name.clone());
-            //visit each of the connections (ignoring disconnected_connections)
-            let component = components.get(component_name).unwrap();
-            for connection in component.connections.iter() {
-                if component_names.contains(connection) {
-                    let connection1 = Connection::new(&component_name, &connection);
-                    if !disconnected_connections.contains(&connection1) {
-                        //Not been disconnected - DFS
-                        to_visit.push_front(Visit::new(&group_name, &connection));
-                    }
+    while !candidates.is_empty() {
+        let mut max_next_vertex: Option<&String> = None;
+        let mut max_weight = usize::MIN;
+        for candidate in candidates.iter() {
+            let mut weight_sum = 0;
+            let component = components.get(*candidate).unwrap();
+            for found in found_set.iter() {
+                if component.connections.contains(*found) {
+                    weight_sum += component.connection_weights.get(*found).unwrap_or(&1);
                 }
+            }
+            if weight_sum > max_weight {
+                max_next_vertex = Some(candidate);
+                max_weight = weight_sum;
             }
         }
-        //If we're empty, and there are more components.  Then visit the next one in the component_names
-        //but only if itr  we didn't get over the max groups
-        if to_visit.is_empty() {
-            if let Some(name) = component_names.iter().next() {
-                if result.len() >= max_groups {
-                    //we can stop now - this would push us over the number of groups
-                    return None;
-                }
-                to_visit.push_back(Visit::new(name, name));
-            }
+
+        if let Some(next) = max_next_vertex {
+            candidates.remove(&next);
+            found_set.push(next);
+            cut_weights.push(max_weight);
         }
     }
     //Sanity
-    if !component_names.is_empty() {
-        panic!("Still had some components!: {component_names:?}")
+    if found_set.len() < 2 {
+        panic!("Not enough in found set")
     }
-    if result.len() == max_groups {
-        Some(result)
-    } else {
-        None
-    }
-}
-
-struct Visit2 {
-    to_visit: String,
-    depth: usize,
-}
-
-impl Visit2 {
-    fn new(to_visit: &String, depth: usize) -> Visit2 {
-        Visit2 {
-            to_visit: to_visit.clone(),
-            depth,
-        }
+    CutOfThePhase {
+        s: found_set[found_set.len() - 2].clone(),
+        t: found_set[found_set.len() - 1].clone(),
+        cut_weight: cut_weights[cut_weights.len() - 1],
     }
 }
 
-fn get_connected_within_distance(components: &BTreeMap<String, Component>, component_name: &String, distance: usize) -> HashSet<String> {
-    //starting at component, try to get to to as many components as possible
-    let mut visited: HashSet<String> = HashSet::default();
-    let mut to_visit: VecDeque<Visit2> = VecDeque::from([Visit2::new(component_name, 0)]);
-    //BFS
-    while let Some(visit) = to_visit.pop_front() {
-        if visited.contains(&visit.to_visit) {
-            continue;
-        }
-        //got to the max depth?
-        if visit.depth == distance {
-            continue;
-        }
-        //otherwise - visit the connections
-        let component = components.get(&visit.to_visit).unwrap();
-        for connection in component.connections.iter() {
-            to_visit.push_back(Visit2::new(connection, visit.depth + 1));
-        }
-        visited.insert(visit.to_visit);
-    }
-    visited
-}
+fn merge_vertices_from_cut(components: &mut HashMap<String, Component>, cut_of_the_phase: &CutOfThePhase) {
+    // println!();
+    // println!("{cut_of_the_phase:?}");
+    //merge t into s
+    let mut t = components.remove(&cut_of_the_phase.t).unwrap();
+    // println!("t: {t:?}");
+    let mut s = components.remove(&cut_of_the_phase.s).unwrap();
+    // println!("s: {s:?}");
 
-fn get_end_point_connections(components: &BTreeMap<String, Component>, connection: &Connection) -> BTreeSet<String> {
-    let component1 = components.get(&connection.from).unwrap();
-    let component2 = components.get(&connection.to).unwrap();
-    component1.connections.union(&component2.connections).cloned().collect()
-}
-
-fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
-    // state.components.iter()
-    //     .map(|(name, _)| (
-    //         name,
-    //         get_connected_within_distance(&state.components, name, 2)
-    //     ))
-    //     .for_each(|(name, connected)|
-    //         println!("{name}: {connected:?}")
-    //     );
-    let mut connections = state.connections
-        .iter()
-        .map(|connection| (
-            connection.clone(),
-            get_end_point_connections(&state.components, &connection)
-        ))
-        .collect::<Vec<_>>();
-    //Biggest number of connections first
-    connections.sort_by(|(_, end_point_connections1), (_, end_point_connections2)|
-        end_point_connections1.len().cmp(&end_point_connections2.len()).reverse()
-    );
-    connections.iter().for_each(|(connection, connections)| {
-        println!("{:?}: {:?}", connection, connections);
+    //Use s as the new component
+    t.combined_nodes.into_iter().for_each(|node| {
+        s.combined_nodes.insert(node);
     });
+    s.combined_nodes.insert(t.name.clone());
 
-    let mut found_groups: Option<HashMap<String, HashSet<String>>> = None;
-    //remove 3 connections and then see if we get 2 distinct groups
-    let started = time::Instant::now();
-    'outer: for i in 0..connections.len() {
-        let (connection1, _) = &connections[i];
-        for j in (i + 1)..connections.len() {
-            println!("{i} {j}: {}", started.elapsed().as_secs());
-            let (connection2, _) = &connections[j];
-            for k in (j+1)..connections.len() {
-                let (connection3, _) = &connections[k];
-                // println!("{i}, {j}, {k}: {:?}, {:?}, {:?}", connection1, connection2, connection3);
-                let disconnected_connections = HashSet::from([connection1.clone(), connection2.clone(), connection3.clone()]);
-                if let Some(groups) = get_groups(&state.components, &disconnected_connections, 2) {
-                    if groups.len() == 2 {
-                        found_groups = Some(groups);
-                        break 'outer;
-                    }
-                }
+    t.connections.drain().filter(|edge| *edge != s.name).for_each(|edge| {
+        // println!("opposite t get: {edge}");
+        let opposite = components.get_mut(&edge).unwrap();
+        // println!("opposite t before: {opposite:?}");
+        if s.connections.contains(&edge) {
+            // println!("In s");
+            //edges in common should be weighted higher
+            let connection_weight = match (s.connection_weights.get(&edge), t.connection_weights.get(&edge)) {
+                (None, None) => 2,
+                (Some(weight), None) |
+                (None, Some(weight)) => weight + 1,
+                (Some(weight_s), Some(weight_t)) => weight_s + weight_t,
+            };
+            s.connection_weights.insert(edge.clone(), connection_weight);
+            opposite.connection_weights.insert(s.name.clone(), connection_weight);
+        } else {
+            // println!("Not in s");
+            //not in s, move it across
+            s.connections.insert(edge.clone());
+            opposite.connections.insert(s.name.clone());
+            if let Some(weight) = opposite.connection_weights.get(&t.name) {
+                s.connection_weights.insert(edge.clone(), *weight);
+                opposite.connection_weights.insert(s.name.clone(), *weight);
             }
         }
+        opposite.connections.remove(&t.name);
+        opposite.connection_weights.remove(&t.name);
+        // println!("opposite t: {opposite:?}");
+    });
+    //Final adjustments to s
+    s.connections.remove(&t.name);
+    s.connection_weights.remove(&t.name);
+    //add the new node back in
+    // println!("new s: {s:?}");
+    components.insert(s.name.clone(), s);
+}
+
+fn find_min_cut(state: &State) ->(HashSet<String>, CutOfThePhase) {
+    let mut components = state.components.clone();
+    let mut current_partition: HashSet<String> = HashSet::default();
+    let mut current_best_partition: Option<HashSet<String>> = None;
+    let mut current_best_cut: Option<CutOfThePhase> = None;
+
+    while components.len() > 1 {
+        println!("components.len: {}", components.len());
+        let cut_of_the_phase = maximum_adjacency_search(&components);
+        let current_best_cut_weight = current_best_cut.iter().map(|cut| cut.cut_weight).next().unwrap_or(usize::MAX);
+
+        current_partition.insert(cut_of_the_phase.t.clone());
+
+        //Ugly but hey ho
+        let mut first: HashSet<&String> = HashSet::default();
+        let mut second: HashSet<&String> = HashSet::default();
+        let mut cutting_connections: Vec<&Connection> = Vec::default();
+
+        for component_name in state.components.keys() {
+            if current_partition.contains(component_name) {
+                first.insert(component_name);
+            } else {
+                second.insert(component_name);
+            }
+        }
+        for connection in state.connections.iter() {
+            if !(first.contains(&connection.from) && first.contains(&connection.to))
+               && !(second.contains(&connection.from) && second.contains(&connection.to)) {
+                cutting_connections.push(connection);
+            }
+        }
+        if cutting_connections.len() == 3 {
+            return (current_partition, cut_of_the_phase);
+        }
+
+        if cut_of_the_phase.cut_weight < current_best_cut_weight {
+            current_best_partition = Some(current_partition.clone());
+            current_best_cut = Some(cut_of_the_phase.clone());
+        }
+        merge_vertices_from_cut(&mut components, &cut_of_the_phase);
     }
-    let found_groups = found_groups.expect("Didn't find the groups");
-    let result = found_groups.values().map(|group| group.len()).product();
-    Ok(result)
+
+    (current_best_partition.expect("No current best partition"), current_best_cut.expect("No current best cut"))
+}
+
+//Adapted from https://blog.thomasjungblut.com/graph/mincut/mincut/
+fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
+    let (partition, _best_cut) = find_min_cut(&state);
+
+    let mut first: HashSet<String> = HashSet::default();
+    let mut second: HashSet<String> = HashSet::default();
+    let mut cutting_connections: Vec<Connection> = Vec::default();
+
+    for component_name in state.components.keys() {
+        if partition.contains(component_name) {
+            first.insert(component_name.clone());
+        } else {
+            second.insert(component_name.clone());
+        }
+    }
+    for connnection in state.connections {
+        if !(first.contains(&connnection.from) && first.contains(&connnection.to))
+           && !(second.contains(&connnection.from) && second.contains(&connnection.to)) {
+            cutting_connections.push(connnection);
+        }
+    }
+    println!("Cutting Connections: {cutting_connections:?}");
+
+    Ok(first.len() * second.len())
 }
 
 fn calc_result(state: ProcessedState) -> Result<FinalResult, AError> {

@@ -7,7 +7,7 @@ use std::{
 use anyhow::anyhow;
 use once_cell::sync::Lazy;
 use processor::{process, read_word};
-use rand::Rng;
+use rand::seq::SliceRandom;
 
 type AError = anyhow::Error;
 
@@ -72,10 +72,7 @@ fn parse_line(mut state: InitialState, line: String) -> Result<InitialState, AEr
         let (name, _) = read_word(&mut chars, &DELIMITERS)
             .ok_or_else(|| anyhow!("Didn't find word: {line}"))?;
         let id = get_id_for_name(&mut state, &name);
-        state
-            .components
-            .entry(id)
-            .or_default();
+        state.components.entry(id).or_default();
         while let Some((other, _)) = read_word(&mut chars, &DELIMITERS) {
             let other = &other;
             //connect to this component
@@ -115,14 +112,14 @@ impl Subset {
     }
 }
 
-fn find(subsets: &mut Vec<Subset>, id: Id) -> usize {
+fn find(subsets: &mut [Subset], id: Id) -> usize {
     if subsets[id].parent != id {
         subsets[id].parent = find(subsets, subsets[id].parent);
     }
     subsets[id].parent
 }
 
-fn union(subsets: &mut Vec<Subset>, x: Id, y: Id) {
+fn union(subsets: &mut [Subset], x: Id, y: Id) {
     let x_root = find(subsets, x);
     let y_root = find(subsets, y);
 
@@ -132,23 +129,29 @@ fn union(subsets: &mut Vec<Subset>, x: Id, y: Id) {
         Ordering::Equal => {
             subsets[y_root].parent = x_root;
             subsets[x_root].rank += 1;
-        },
+        }
     }
 }
 
-//See https://www.geeksforgeeks.org/introduction-and-implementation-of-kargers-algorithm-for-minimum-cut/
+//Adapted from https://www.geeksforgeeks.org/introduction-and-implementation-of-kargers-algorithm-for-minimum-cut/
 fn kargers_min_cut(state: &State) -> HashSet<Connection> {
-    let mut rng = rand::thread_rng();
+    let mut subsets: Vec<Subset> = (0..state.components.len())
+        .map(|i| Subset::new(i, 0))
+        .collect();
 
-    let mut subsets: Vec<Subset> = (0..state.components.len()).map(|i| Subset::new(i, 0)).collect();
-    let connections = state.connections.iter().collect::<Vec<_>>();
+    let mut connections = state.connections.iter().collect::<Vec<_>>();
+    connections.shuffle(&mut rand::thread_rng());
+    let mut connections_iter = connections.iter();
+
     let mut vertices = state.components.len();
-
     while vertices > 2 {
-        let index: usize = rng.gen_range(0..connections.len());
-        let connection = connections[index];
+        let connection = if let Some(conn) = connections_iter.next() {
+            conn
+        } else {
+            panic!("Ran out of connections :(");
+        };
 
-        //println!("{connection:?}");
+        // println!("{connection:?}");
 
         let subset1 = find(&mut subsets, connection.from);
         let subset2 = find(&mut subsets, connection.to);
@@ -157,8 +160,7 @@ fn kargers_min_cut(state: &State) -> HashSet<Connection> {
             continue;
         }
 
-        //println!("{subset1} <- {subset2}");
-        //merge_vertices_from_cut(&mut components, subset1, subset2);
+        // println!("{subset1} <- {subset2}");
         union(&mut subsets, subset1, subset2);
         vertices -= 1;
     }
@@ -191,12 +193,11 @@ impl Visit {
 
 /// find all of the groups, ignoring any connections in the disconnected_connections set
 ///
-/// returns a map of component name to all connected component names
+/// returns a map of component id to all connected component ids
 fn get_groups(
     components: &HashMap<Id, Component>,
     disconnected_connections: &HashSet<Connection>,
-    max_groups: usize,
-) -> Option<HashMap<Id, HashSet<Id>>> {
+) -> HashMap<Id, HashSet<Id>> {
     let mut component_ids = components.keys().cloned().collect::<HashSet<_>>();
     let mut result = HashMap::default();
     //Prime
@@ -204,38 +205,29 @@ fn get_groups(
     let mut to_visit: VecDeque<Visit> = VecDeque::from([Visit::new(first, first)]);
     //Pump
     while let Some(visit) = to_visit.pop_front() {
-        let component_id = &visit.to_visit;
-        if component_ids.contains(component_id) {
+        if component_ids.contains(&visit.to_visit) {
             // Not Already visited
-            component_ids.remove(component_id); //now we have
-                                                //add it to the group
-            let group_id = &visit.current_group;
-            if !result.contains_key(group_id) {
-                let component_names = HashSet::default();
-                result.insert(*group_id, component_names);
-            }
-            result.get_mut(group_id).unwrap().insert(*component_id);
+            component_ids.remove(&visit.to_visit); //now we have, add it to the group
+            result
+                .entry(visit.current_group)
+                .or_insert_with(HashSet::default)
+                .insert(visit.to_visit);
             //visit each of the connections (ignoring disconnected_connections)
-            let component = components.get(component_id).unwrap();
+            let component = components.get(&visit.to_visit).unwrap();
             for connection in component.connections.iter() {
                 if component_ids.contains(connection) {
-                    let connection1 = Connection::new(component_id, connection);
+                    let connection1 = Connection::new(&visit.to_visit, connection);
                     if !disconnected_connections.contains(&connection1) {
                         //Not been disconnected - DFS
-                        to_visit.push_front(Visit::new(group_id, connection));
+                        to_visit.push_front(Visit::new(&visit.current_group, connection));
                     }
                 }
             }
         }
-        //If we're empty, and there are more components.  Then visit the next one in the component_names
-        //but only if itr  we didn't get over the max groups
+        //If the queue is empty, and there are more components, then visit the next one in the component_names
         if to_visit.is_empty() {
             if let Some(id) = component_ids.iter().next() {
-                if result.len() >= max_groups {
-                    //we can stop now - this would push us over the number of groups
-                    return None;
-                }
-                to_visit.push_back(Visit::new(id, id));
+                to_visit.push_front(Visit::new(id, id));
             }
         }
     }
@@ -243,11 +235,7 @@ fn get_groups(
     if !component_ids.is_empty() {
         panic!("Still had some components!: {component_ids:?}")
     }
-    if result.len() == max_groups {
-        Some(result)
-    } else {
-        None
-    }
+    result
 }
 
 fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
@@ -256,8 +244,7 @@ fn perform_processing(state: LoadedState) -> Result<ProcessedState, AError> {
         cut_edges = kargers_min_cut(&state);
     }
     //Now calculate the partition sizes.
-    let partitions = get_groups(&state.components, &cut_edges, 2);
-    let partitions = partitions.expect("No Partitions!");
+    let partitions = get_groups(&state.components, &cut_edges);
     Ok(partitions
         .values()
         .map(|components| components.len())

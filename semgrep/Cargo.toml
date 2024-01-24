@@ -1,0 +1,14 @@
+[package]
+name = "semgrep"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+once_cell = "1"
+processor = { path = "../processor" }
+rand = "0"
+regex = "1"
+substring = "1"
